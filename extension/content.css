@@ -1,0 +1,23 @@
+html.plainly-pending #mw-content-text .mw-parser-output p,
+html.plainly-pending #mw-content-text .mw-parser-output li:not(.toclevel-1):not(.toclevel-2) {
+  visibility: hidden !important;
+}
+
+html.plainly-enabled [data-plainly-state="loading"] {
+  visibility: hidden !important;
+}
+
+#plainly-indicator {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.96);
+  color: #202122;
+  font: 600 13px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+}
