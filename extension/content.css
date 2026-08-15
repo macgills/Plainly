@@ -21,3 +21,8 @@ html.plainly-enabled [data-plainly-state="loading"] {
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
   cursor: pointer;
 }
+
+#plainly-indicator:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
