@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Plainly",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Browse Wikipedia at an adjusted reading level.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://en.wikipedia.org/*",
-    "http://127.0.0.1/*",
-    "http://localhost/*"
+    "https://api.openai.com/*",
+    "http://127.0.0.1/*"
   ],
   "background": {
     "service_worker": "background.js",

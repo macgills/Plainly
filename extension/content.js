@@ -1,5 +1,4 @@
 (() => {
-  const DEFAULT_SETTINGS = Object.freeze({ enabled: true, level: 2 });
   const BLOCK_SELECTOR = [
     "#mw-content-text .mw-parser-output p",
     "#mw-content-text .mw-parser-output li",
@@ -20,8 +19,9 @@
   void bootstrap();
 
   async function bootstrap() {
-    const settings = await chrome.storage.local.get(DEFAULT_SETTINGS);
-    if (!settings.enabled) {
+    const settingsResponse = await chrome.runtime.sendMessage({ type: "PLAINLY_GET_SETTINGS" });
+    const settings = settingsResponse?.settings;
+    if (!settingsResponse?.ok || !settings?.enabled || !settings.hasApiKey) {
       leaveAdjustedMode();
       return;
     }
@@ -41,10 +41,16 @@
     }
 
     document.documentElement.classList.remove("plainly-pending");
-    addIndicator(settings.level);
+    const indicator = addIndicator(settings.level);
 
     const [first, ...rest] = blocks;
-    await transformBatch([first], settings.level);
+    const firstAdjusted = await transformBatch([first], settings.level);
+    if (!firstAdjusted) {
+      for (const block of rest) block.element.dataset.plainlyState = "error";
+      markIndicatorUnavailable(indicator);
+      return;
+    }
+
     for (let index = 0; index < rest.length; index += 4) {
       await transformBatch(rest.slice(index, index + 4), settings.level);
     }
@@ -90,7 +96,7 @@
   }
 
   async function transformBatch(blocks, level) {
-    if (blocks.length === 0) return;
+    if (blocks.length === 0) return true;
 
     try {
       const response = await chrome.runtime.sendMessage({
@@ -112,14 +118,18 @@
         block.element.textContent = adjusted;
         block.element.dataset.plainlyState = "ready";
       }
+      return true;
     } catch (error) {
       console.warn("Plainly could not adjust a block; restoring original text.", error);
       for (const block of blocks) block.element.dataset.plainlyState = "error";
+      return false;
     }
   }
 
   function addIndicator(level) {
-    if (document.getElementById("plainly-indicator")) return;
+    const existing = document.getElementById("plainly-indicator");
+    if (existing) return existing;
+
     const indicator = document.createElement("button");
     indicator.id = "plainly-indicator";
     indicator.type = "button";
@@ -141,5 +151,12 @@
       indicator.title = showingOriginal ? "Show original text" : "Show adjusted text";
     });
     document.documentElement.append(indicator);
+    return indicator;
+  }
+
+  function markIndicatorUnavailable(indicator) {
+    indicator.textContent = "Plainly · Couldn’t adjust";
+    indicator.title = "Open Plainly and check your API key";
+    indicator.disabled = true;
   }
 })();

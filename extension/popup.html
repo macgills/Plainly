@@ -15,13 +15,34 @@
           <input id="enabled" type="checkbox" />
         </label>
       </header>
+
+      <section class="api-key-section" aria-labelledby="api-key-heading">
+        <div class="section-heading" id="api-key-heading">OpenAI API key</div>
+        <div class="api-key-row">
+          <input
+            id="api-key"
+            type="password"
+            placeholder="sk-…"
+            autocomplete="off"
+            spellcheck="false"
+            aria-label="OpenAI API key"
+          />
+          <button id="save-key" type="button">Save</button>
+        </div>
+        <div class="key-state-row">
+          <span id="key-status" role="status">Checking…</span>
+          <button id="remove-key" class="link-button" type="button" hidden>Remove</button>
+        </div>
+        <p class="hint">Stored in this Chrome profile and sent only to OpenAI when Plainly adjusts a page.</p>
+      </section>
+
       <fieldset>
         <legend>Reading level</legend>
         <label><input type="radio" name="level" value="1" /> Level 1</label>
         <label><input type="radio" name="level" value="2" /> Level 2</label>
         <label><input type="radio" name="level" value="3" /> Level 3</label>
       </fieldset>
-      <p>Changes apply automatically to the next Wikipedia page you open.</p>
+      <p>Changes apply automatically to the next Wikipedia page you open or reload.</p>
     </main>
     <script src="popup.js"></script>
   </body>
