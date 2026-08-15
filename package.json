@@ -1,12 +1,11 @@
 {
   "name": "plainly",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev:server": "node server/index.mjs",
-    "test": "npm run test:server && npm run test:integration",
-    "test:server": "node --test tests/server.integration.test.mjs",
+    "test": "npm run test:openai && npm run test:integration",
+    "test:openai": "node --test tests/openai.integration.test.mjs",
     "test:integration": "playwright test"
   },
   "engines": {
