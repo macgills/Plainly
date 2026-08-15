@@ -1,0 +1,18 @@
+{
+  "name": "plainly",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:server": "node server/index.mjs",
+    "test": "npm run test:server && npm run test:integration",
+    "test:server": "node --test tests/server.integration.test.mjs",
+    "test:integration": "playwright test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.55.0"
+  }
+}
