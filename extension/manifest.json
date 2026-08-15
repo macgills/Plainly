@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "Plainly",
+  "version": "0.1.0",
+  "description": "Browse Wikipedia at an adjusted reading level.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://en.wikipedia.org/*",
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Plainly",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://en.wikipedia.org/wiki/*"],
+      "css": ["content.css"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}
