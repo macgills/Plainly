@@ -21,6 +21,17 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      - name: Build deterministic Plainly preview
+        run: npm run demo
+      - name: Publish prototype preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-prototype-preview-${{ github.run_number }}
+          path: |
+            artifacts-preview/
+            extension/
+          if-no-files-found: error
+          retention-days: 30
 
   live-openai:
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -34,7 +45,6 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: npx playwright install --with-deps chromium
       - name: Verify live OpenAI secret
         shell: bash
         run: |
@@ -44,9 +54,10 @@ jobs:
           fi
       - name: Probe live Responses API through production adapter
         run: npm run test:live:api
+      - run: npx playwright install --with-deps chromium
       - name: Run live Plainly browser integration test
         run: npm run test:live
-      - name: Publish shareable Plainly demo
+      - name: Publish shareable live Plainly demo
         uses: actions/upload-artifact@v4
         with:
           name: plainly-live-demo-${{ github.run_number }}
