@@ -64,7 +64,7 @@ Every green deterministic CI run also publishes a `plainly-prototype-preview-*` 
 
 ### Live OpenAI integration and demo artifacts
 
-GitHub Actions also runs a live end-to-end test when the repository secret `AI_SECRET` is available. It first probes the production OpenAI adapter so credential, quota, model, or schema problems fail quickly before Chromium is downloaded. When that probe succeeds, the live test:
+GitHub Actions also runs a non-blocking live end-to-end check when the repository secret `AI_SECRET` is available. It first probes the production OpenAI adapter so credential, quota, model, or schema problems fail quickly before Chromium is downloaded. When that probe succeeds, the live test:
 
 1. launches Chromium with the shipped extension;
 2. enters `AI_SECRET` through the real popup UI;
@@ -81,7 +81,7 @@ The live artifact contains:
 - `plainly-live-result.json` — sanitized transformed text and latency metadata
 - the unpacked `extension/` directory so the build can be tried manually
 
-The live workflow intentionally disables Playwright traces and does not save the browser profile. The API key and request headers are not included in the artifact.
+The live workflow intentionally disables Playwright traces and does not save the browser profile. The API key and request headers are not included in the artifact. Live API availability does not gate deterministic PR CI.
 
 Run the same live test locally with:
 
