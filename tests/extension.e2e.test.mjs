@@ -24,8 +24,7 @@ const test = base.extend({
     await context.close();
   },
   extensionId: async ({ context }, use) => {
-    let [serviceWorker] = context.serviceWorkers();
-    if (!serviceWorker) serviceWorker = await context.waitForEvent("serviceworker");
+    const serviceWorker = await getServiceWorker(context);
     await use(new URL(serviceWorker.url()).host);
   },
 });
@@ -50,12 +49,6 @@ test("never exposes original prose while the first adjusted paragraph is pending
 });
 
 test("does not hide Wikipedia when no API key has been configured", async ({ context }) => {
-  const serviceWorker = await getServiceWorker(context);
-  await serviceWorker.evaluate(async () => {
-    await chrome.storage.local.set({ enabled: true, level: 2 });
-    await chrome.storage.local.remove("openAIApiKey");
-  });
-
   const page = await openWikipedia(context, "Photosynthesis");
   await expect(page.locator("#intro")).toContainText("Photosynthesis is a system of biological processes");
   await expect(page.locator("#intro")).toBeVisible();
@@ -109,11 +102,12 @@ test("restores original prose if OpenAI fails instead of leaving the page blocke
 test("popup saves and removes a user API key without displaying it back", async ({ context, extensionId }) => {
   const page = await context.newPage();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  const keyInput = page.getByRole("textbox", { name: "OpenAI API key" });
 
-  await page.getByLabel("OpenAI API key").fill(TEST_KEY);
+  await keyInput.fill(TEST_KEY);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("status")).toHaveText("API key saved on this device.");
-  await expect(page.getByLabel("OpenAI API key")).toHaveValue("");
+  await expect(keyInput).toHaveValue("");
 
   const serviceWorker = await getServiceWorker(context);
   await expect.poll(() => serviceWorker.evaluate(async () => (
@@ -163,9 +157,13 @@ async function openWikipedia(context, title) {
 }
 
 async function getServiceWorker(context) {
-  let [serviceWorker] = context.serviceWorkers();
-  if (!serviceWorker) serviceWorker = await context.waitForEvent("serviceworker");
-  return serviceWorker;
+  const existing = context.serviceWorkers().find((worker) => worker.url().startsWith("chrome-extension://"));
+  if (existing) return existing;
+
+  while (true) {
+    const worker = await context.waitForEvent("serviceworker");
+    if (worker.url().startsWith("chrome-extension://")) return worker;
+  }
 }
 
 async function startFakeOpenAI({ delayMs }) {
