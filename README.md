@@ -41,17 +41,43 @@ npm install
 npm test
 ```
 
-The integration suite launches Playwright's Chromium with the actual Manifest V3 extension loaded. It verifies:
+The deterministic integration suite launches Playwright's Chromium with the actual Manifest V3 extension loaded. It verifies:
 
-- original Wikipedia prose stays hidden while the first OpenAI response is pending
+- original Wikipedia prose stays hidden while the first simplification response is pending
 - adjusted prose is revealed in place
 - no API key means Wikipedia remains immediately readable
-- the stored key is sent as the OpenAI bearer token without being displayed back in the popup
 - adjusted mode and reading level persist across navigation
-- OpenAI failure restores the original prose instead of leaving content blocked
+- simplification failure restores the original prose instead of leaving content blocked
 - popup key save/remove and reading-level persistence work through real extension storage
 
-A fast Node integration test also exercises the OpenAI HTTP boundary against a fake Responses endpoint. Tests never call the real OpenAI API or require a real key.
+A fast Node integration test separately exercises the production OpenAI HTTP contract against a fake Responses endpoint, including bearer authentication and strict structured-output mapping. Deterministic tests never call the real OpenAI API or require a real key.
+
+### Live OpenAI integration and demo artifacts
+
+GitHub Actions also runs a live end-to-end test when the repository secret `AI_SECRET` is available. The live test:
+
+1. launches Chromium with the shipped extension;
+2. enters `AI_SECRET` through the real popup UI;
+3. opens a Wikipedia fixture on the real Wikipedia origin;
+4. allows the extension service worker to call the real OpenAI Responses API;
+5. verifies the adjusted prose is written back into the page; and
+6. publishes a `plainly-live-demo-*` workflow artifact.
+
+The artifact contains:
+
+- `plainly-live-wikipedia.png` — the transformed Wikipedia view
+- `plainly-before-after.png` — a shareable side-by-side comparison
+- `plainly-before-after.html` — a standalone comparison page
+- `plainly-live-result.json` — sanitized transformed text and latency metadata
+- the unpacked `extension/` directory so the build can be tried manually
+
+The live workflow intentionally disables Playwright traces and does not save the browser profile. The API key and request headers are not included in the artifact.
+
+Run the same live test locally with:
+
+```bash
+AI_SECRET="..." npm run test:live
+```
 
 ## Architecture
 
