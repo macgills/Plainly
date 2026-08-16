@@ -52,9 +52,19 @@ The deterministic integration suite launches Playwright's Chromium with the actu
 
 A fast Node integration test separately exercises the production OpenAI HTTP contract against a fake Responses endpoint, including bearer authentication and strict structured-output mapping. Deterministic tests never call the real OpenAI API or require a real key.
 
+### Prototype preview artifact
+
+Every green deterministic CI run also publishes a `plainly-prototype-preview-*` artifact. It contains the real extension UI and browser DOM path with deterministic simplification output, clearly labelled as a prototype preview rather than a live model response:
+
+- `plainly-popup.png` — extension setup UI
+- `plainly-wikipedia-preview.png` — Wikipedia after Plainly adjustment
+- `plainly-before-after-preview.png` — shareable before/after image
+- `plainly-before-after-preview.html` — standalone before/after page
+- the unpacked production `extension/` directory
+
 ### Live OpenAI integration and demo artifacts
 
-GitHub Actions also runs a live end-to-end test when the repository secret `AI_SECRET` is available. The live test:
+GitHub Actions also runs a live end-to-end test when the repository secret `AI_SECRET` is available. It first probes the production OpenAI adapter so credential, quota, model, or schema problems fail quickly before Chromium is downloaded. When that probe succeeds, the live test:
 
 1. launches Chromium with the shipped extension;
 2. enters `AI_SECRET` through the real popup UI;
@@ -63,7 +73,7 @@ GitHub Actions also runs a live end-to-end test when the repository secret `AI_S
 5. verifies the adjusted prose is written back into the page; and
 6. publishes a `plainly-live-demo-*` workflow artifact.
 
-The artifact contains:
+The live artifact contains:
 
 - `plainly-live-wikipedia.png` — the transformed Wikipedia view
 - `plainly-before-after.png` — a shareable side-by-side comparison
@@ -76,6 +86,7 @@ The live workflow intentionally disables Playwright traces and does not save the
 Run the same live test locally with:
 
 ```bash
+AI_SECRET="..." npm run test:live:api
 AI_SECRET="..." npm run test:live
 ```
 
