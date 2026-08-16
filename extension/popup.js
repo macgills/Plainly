@@ -4,9 +4,30 @@ const saveKey = document.querySelector("#save-key");
 const removeKey = document.querySelector("#remove-key");
 const keyStatus = document.querySelector("#key-status");
 
-void initialise();
+bindEvents();
+const ready = loadSettings();
 
-async function initialise() {
+function bindEvents() {
+  enabled.addEventListener("change", async () => {
+    await ready;
+    await updateSettings({ enabled: enabled.checked });
+  });
+
+  for (const radio of document.querySelectorAll('input[name="level"]')) {
+    radio.addEventListener("change", async () => {
+      await ready;
+      if (radio.checked) await updateSettings({ level: Number(radio.value) });
+    });
+  }
+
+  saveKey.addEventListener("click", () => void saveApiKey());
+  apiKey.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") void saveApiKey();
+  });
+  removeKey.addEventListener("click", () => void removeApiKey());
+}
+
+async function loadSettings() {
   const response = await send({ type: "PLAINLY_GET_SETTINGS" });
   if (!response?.ok) {
     setStatus(response?.error ?? "Could not read Plainly settings", true);
@@ -14,22 +35,6 @@ async function initialise() {
   }
 
   renderSettings(response.settings);
-
-  enabled.addEventListener("change", async () => {
-    await updateSettings({ enabled: enabled.checked });
-  });
-
-  for (const radio of document.querySelectorAll('input[name="level"]')) {
-    radio.addEventListener("change", async () => {
-      if (radio.checked) await updateSettings({ level: Number(radio.value) });
-    });
-  }
-
-  saveKey.addEventListener("click", saveApiKey);
-  apiKey.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") void saveApiKey();
-  });
-  removeKey.addEventListener("click", removeApiKey);
 }
 
 async function updateSettings(settings) {
@@ -38,6 +43,7 @@ async function updateSettings(settings) {
 }
 
 async function saveApiKey() {
+  await ready;
   const value = apiKey.value.trim();
   saveKey.disabled = true;
   setStatus("Saving…");
@@ -56,6 +62,7 @@ async function saveApiKey() {
 }
 
 async function removeApiKey() {
+  await ready;
   const response = await send({ type: "PLAINLY_REMOVE_API_KEY" });
   if (!response?.ok) {
     setStatus(response?.error ?? "Could not remove API key", true);
