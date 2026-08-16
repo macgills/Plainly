@@ -6,7 +6,8 @@
   "scripts": {
     "test": "npm run test:openai && npm run test:integration",
     "test:openai": "node --test tests/openai.integration.test.mjs",
-    "test:integration": "playwright test"
+    "test:integration": "playwright test",
+    "test:live": "playwright test --config=playwright.live.config.mjs"
   },
   "engines": {
     "node": ">=20"
