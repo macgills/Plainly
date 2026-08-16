@@ -1,4 +1,4 @@
-import { DEFAULT_MODEL, DEFAULT_OPENAI_API_URL, simplifyWithOpenAI } from "./openai.js";
+import { simplifyWithOpenAI } from "./openai.js";
 
 const DEFAULT_SETTINGS = Object.freeze({ enabled: true, level: 2 });
 
@@ -71,18 +71,8 @@ async function saveApiKey(apiKey) {
 }
 
 async function simplify(payload) {
-  const stored = await chrome.storage.local.get({
-    openAIApiKey: "",
-    openAIApiUrl: DEFAULT_OPENAI_API_URL,
-    plainlyModel: DEFAULT_MODEL,
-  });
-
-  return simplifyWithOpenAI({
-    apiKey: stored.openAIApiKey,
-    apiUrl: stored.openAIApiUrl,
-    model: stored.plainlyModel,
-    payload,
-  });
+  const { openAIApiKey = "" } = await chrome.storage.local.get("openAIApiKey");
+  return simplifyWithOpenAI({ apiKey: openAIApiKey, payload });
 }
 
 async function restrictSecretStorage() {
