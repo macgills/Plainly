@@ -42,7 +42,9 @@ jobs:
             echo "::error::AI_SECRET repository secret is required for the live integration test"
             exit 1
           fi
-      - name: Run live Plainly integration test
+      - name: Probe live Responses API through production adapter
+        run: npm run test:live:api
+      - name: Run live Plainly browser integration test
         run: npm run test:live
       - name: Publish shareable Plainly demo
         uses: actions/upload-artifact@v4
