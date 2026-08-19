@@ -197,7 +197,7 @@ jobs:
     continue-on-error: true
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     env:
       AI_SECRET: ${{ secrets.AI_SECRET }}
     steps:
@@ -222,6 +222,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Run live Plainly browser integration test
         run: npm run test:live
+      - name: Build teacher evaluation pack
+        run: npm run eval:live
       - name: Publish shareable live Plainly demo
         uses: actions/upload-artifact@v4
         with:
@@ -229,5 +231,12 @@ jobs:
           path: |
             artifacts/
             extension/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish teacher review pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-teacher-review-${{ github.run_number }}
+          path: evaluation-artifacts/
           if-no-files-found: error
           retention-days: 30

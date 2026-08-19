@@ -28,6 +28,19 @@ class FidelityGuardTest {
             AdjustedBlock(source.key, "The mission launched long ago and lasted several days."),
         )
 
-        assertEquals("numbers_removed", issues.single().code)
+        assertEquals("numeric_facts_changed", issues.single().code)
+        assertTrue(issues.single().message.contains("1969"))
+        assertTrue(issues.single().message.contains("8"))
+    }
+
+    @Test
+    fun rejectsAdjustedTextThatInventsNumericFacts() {
+        val issues = FidelityGuard().validate(
+            source,
+            AdjustedBlock(source.key, "It launched in 1969, lasted 8 days, and carried 3 people."),
+        )
+
+        assertEquals("numeric_facts_changed", issues.single().code)
+        assertTrue(issues.single().message.contains("added: 3"))
     }
 }
