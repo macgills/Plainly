@@ -78,6 +78,7 @@
 
     for (const block of blocks) {
       block.element.dataset.plainlyState = "loading";
+      block.element.dataset.plainlyOriginal = block.text;
     }
 
     document.documentElement.classList.remove("plainly-pending");
