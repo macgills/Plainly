@@ -11,6 +11,7 @@ const wikipediaFixture = await readFile(path.join(here, "fixtures/wikipedia.html
 const TEST_KEY = "sk-test-plainly-browser-integration-key";
 const SLOW_TEST_KEY = "sk-test-plainly-slow-browser-integration-key";
 const FAIL_TEST_KEY = "sk-test-plainly-fail-browser-integration-key";
+const DROP_LINK_TEST_KEY = "sk-test-plainly-drop-link-integration-key";
 
 const fakeOpenAIAdapter = `
 export async function simplifyWithOpenAI({ apiKey, payload }) {
@@ -38,7 +39,9 @@ export async function simplifyWithOpenAI({ apiKey, payload }) {
   return payload.blocks.map((block) => ({
     id: block.id,
     text: block.text.startsWith("Photosynthesis is")
-      ? "Plants use photosynthesis to turn light into energy they can use."
+      ? (apiKey.includes("drop-link")
+        ? "Photosynthesis turns light into energy organisms can use."
+        : "Plants use photosynthesis to turn light into energy they can use.")
       : "Most photosynthesis also releases oxygen as a waste product.",
   }));
 }
@@ -143,6 +146,19 @@ test("preserves Wikipedia links and citations across adjusted and original modes
   await expect(intro).toHaveText("Plants use photosynthesis to turn light into energy they can use.");
   await expect(plantLink).toHaveText("Plants");
   await expect(citation).toHaveText("[1]");
+});
+
+test("fails open with the original linked prose if adjustment drops a protected link term", async ({ context, extensionId }) => {
+  await configureExtension(context, extensionId, { apiKey: DROP_LINK_TEST_KEY, level: 2 });
+
+  const page = await openWikipedia(context, "Photosynthesis");
+  const intro = page.locator("#intro");
+  const plantLink = intro.locator('a[href="/wiki/Plant"]');
+
+  await expect(intro).toContainText("Photosynthesis is a system of biological processes");
+  await expect(intro).toBeVisible();
+  await expect(plantLink).toHaveText("plants");
+  await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Couldn’t adjust");
 });
 
 test("restores original prose if OpenAI fails instead of leaving the page blocked", async ({ context, extensionId }) => {
