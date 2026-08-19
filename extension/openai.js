@@ -42,7 +42,8 @@ export async function simplifyWithOpenAI({
               "Do not add facts, definitions, examples, explanations, causes, or conclusions from your own knowledge.",
               "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
               "Each block may include protectedLinkTexts. Keep every listed linked term in that block's adjusted text with the same wording; capitalization may change only where normal sentence capitalization requires it.",
-              "Do not emit HTML, Markdown, URLs, or citation markers; the browser restores the original Wikipedia links and citations.",
+              "Each block may also include protectedCitationMarkers. These are opaque source-position tokens, not prose. Copy every marker exactly once, keep the markers in the same order, and keep each marker immediately after the same claim it followed in the input. Never invent, rename, duplicate, remove, or reorder a citation marker.",
+              "Do not emit HTML, Markdown, URLs, or human-readable citation labels such as [1]; the browser restores the original Wikipedia links and citation nodes from the protected terms and opaque markers.",
               "Simplify syntax and vocabulary without removing information needed to understand the source.",
               "Return one adjusted string for every supplied block id.",
             ].join(" "),
@@ -148,6 +149,20 @@ function validatePayload(payload) {
         if (typeof linkedText !== "string" || linkedText.trim().length === 0 || linkedText.length > 200) {
           throw new Error("protectedLinkTexts entries must be non-empty strings up to 200 characters");
         }
+      }
+    }
+
+    if (block.protectedCitationMarkers !== undefined) {
+      if (!Array.isArray(block.protectedCitationMarkers) || block.protectedCitationMarkers.length > 32) {
+        throw new Error("protectedCitationMarkers must contain at most 32 markers");
+      }
+      for (const marker of block.protectedCitationMarkers) {
+        if (typeof marker !== "string" || !/^⟦PLAINLY_CITATION_[A-Z]+⟧$/.test(marker)) {
+          throw new Error("protectedCitationMarkers entries must be Plainly opaque citation markers");
+        }
+      }
+      if (new Set(block.protectedCitationMarkers).size !== block.protectedCitationMarkers.length) {
+        throw new Error("protectedCitationMarkers must be unique within a block");
       }
     }
   }
