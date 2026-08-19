@@ -48,6 +48,11 @@ jobs:
         with:
           name: plainly-kmp-browser
           path: extension/generated
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assemble Safari-compatible extension manifest
+        run: npm run build:safari-extension
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -77,7 +82,7 @@ jobs:
           xcodebuild -version | tee artifacts-safari/xcode-version.txt
           echo "Safari packager: $PACKAGER" | tee artifacts-safari/packager-tool.txt
 
-          xcrun "$PACKAGER" extension \
+          xcrun "$PACKAGER" build/safari-extension \
             --project-location "$PWD/safari-generated" \
             --app-name Plainly \
             --bundle-identifier dev.plainly.browser \
@@ -144,7 +149,8 @@ jobs:
           cp -R "$APP" artifacts-safari/
           cp -R "$FRAMEWORK" artifacts-safari/
           cp -R "$PROJECT" artifacts-safari/
-          cp extension/manifest.json artifacts-safari/manifest.json
+          cp build/safari-extension/manifest.json artifacts-safari/safari-manifest.json
+          cp extension/manifest.json artifacts-safari/chrome-manifest.json
 
           cat > artifacts-safari/validation.txt <<EOF
           Plainly Safari/iPad CI validation
@@ -154,6 +160,7 @@ jobs:
           Simulator app: $APP
           Embedded extension: $APPEX
           KMP framework: $FRAMEWORK
+          Safari manifest background uses module scripts; Chrome manifest remains a module service worker.
           EOF
       - name: Publish Safari/iPad build proof
         uses: actions/upload-artifact@v4
