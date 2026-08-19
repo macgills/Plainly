@@ -11,6 +11,7 @@ Plainly is an early Chrome-extension prototype that automatically adjusts Wikipe
 - Persistent Levels 1–3
 - Automatic adjustment on navigation
 - Original prose is hidden while the adjusted version is loading, so difficult text does not flash first
+- Inline Wikipedia links and citations survive adjusted/original mode changes
 - Bring-your-own OpenAI API key, entered directly in the extension
 - No local server required
 
@@ -47,10 +48,12 @@ The deterministic integration suite launches Playwright's Chromium with the actu
 - adjusted prose is revealed in place
 - no API key means Wikipedia remains immediately readable
 - adjusted mode and reading level persist across navigation
+- Wikipedia links remain real anchors in adjusted mode and Original mode
+- citation markers are excluded from model/fidelity prose and restored into adjusted DOM
 - simplification failure restores the original prose instead of leaving content blocked
 - popup key save/remove and reading-level persistence work through real extension storage
 
-A fast Node integration test separately exercises the production OpenAI HTTP contract against a fake Responses endpoint, including bearer authentication and strict structured-output mapping. Deterministic tests never call the real OpenAI API or require a real key.
+A fast Node integration test separately exercises the production OpenAI HTTP contract against a fake Responses endpoint, including bearer authentication, protected linked terms and strict structured-output mapping. Deterministic tests never call the real OpenAI API or require a real key.
 
 ### Prototype preview artifact
 
@@ -96,17 +99,22 @@ AI_SECRET="..." npm run test:live
 Wikipedia page
     ↓ content script @ document_start
 hide candidate prose + request public settings
+    ↓ extract prose without citation markers
+KMP session: stable ids, batching, reconciliation, fidelity
     ↓ runtime message (no API key exposed)
 Manifest V3 service worker
     ↓ reads user key from trusted extension storage
 OpenAI Responses API
+    ↓ adjusted text + protected linked terms
+content script reattaches original anchors/citations
     ↓
 adjusted blocks replace source prose progressively
 ```
 
 ## Current prototype compromises
 
-- Adjusted paragraphs currently replace inline links/citations inside that paragraph. Preserving semantic inline anchors while rewriting text is the next important DOM problem.
+- Linked source terms are protected during simplification; if a rewrite drops one, that block fails open to original prose rather than losing the link.
+- Citations are preserved in source order but currently move to the end of the adjusted block; sentence-level citation placement is not reconstructed after a rewrite.
 - Direct user-key storage is intentionally a prototype convenience; a managed school deployment should move credentials behind a service.
 - There are no accounts, analytics, automatic level assessment, arbitrary-site support, or school deployment features.
 - Failure restores visibility of the original paragraph rather than blocking access to the source.
