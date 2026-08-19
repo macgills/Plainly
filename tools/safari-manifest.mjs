@@ -9,7 +9,7 @@ export function toSafariManifest(manifest) {
 
   if (result.background?.service_worker) {
     result.background = {
-      scripts: [SAFARI_BACKGROUND],
+      service_worker: SAFARI_BACKGROUND,
     };
   }
 
