@@ -15,6 +15,7 @@
     "script",
   ].join(",");
   const CITATION_SELECTOR = "sup.reference, .mw-ref";
+  const CITATION_MARKER_PATTERN = /⟦PLAINLY_CITATION_[A-Z]+⟧/g;
 
   document.documentElement.classList.add("plainly-pending");
   void bootstrap();
@@ -73,6 +74,7 @@
       text: source.text,
       ...prepared[index],
       adjustedNodes: null,
+      citationPlacements: null,
     }));
     const blocksByKey = new Map(blocks.map((block) => [block.key, block]));
 
@@ -101,12 +103,13 @@
             level: settings.level,
             url: location.href,
             title,
-            blocks: requested.map(({ key, text }) => {
+            blocks: requested.map(({ key }) => {
               const block = blocksByKey.get(key);
               return {
                 id: key,
-                text,
-                protectedLinkTexts: uniqueStrings(block?.links.map((link) => link.text) ?? []),
+                text: block.providerText,
+                protectedLinkTexts: uniqueStrings(block.links.map((link) => link.text)),
+                protectedCitationMarkers: block.citations.map((citation) => citation.marker),
               };
             }),
           },
@@ -114,9 +117,30 @@
 
         if (!response?.ok) throw new Error(response?.error ?? "Plainly request failed");
 
+        const acceptedProviderBlocks = [];
+        for (const adjusted of response.blocks) {
+          const block = blocksByKey.get(adjusted.id);
+          if (!block) continue;
+
+          const parsed = parseAdjustedCitations(
+            adjusted.text,
+            block.citations.map((citation) => citation.marker),
+          );
+          if (!parsed) {
+            console.warn(`Plainly rejected ${adjusted.id}: citation markers were not preserved exactly`);
+            continue;
+          }
+
+          block.citationPlacements = parsed.positions.map((position, index) => ({
+            position,
+            node: block.citations[index].node,
+          }));
+          acceptedProviderBlocks.push({ id: adjusted.id, text: parsed.text });
+        }
+
         const decisions = [...session.accept(
-          response.blocks.map((block) => block.id),
-          response.blocks.map((block) => block.text),
+          acceptedProviderBlocks.map((block) => block.id),
+          acceptedProviderBlocks.map((block) => block.text),
         )];
         const allReady = applyDecisions(decisions, blocksByKey, indicator);
 
@@ -173,18 +197,33 @@
   }
 
   function prepareReadableElement(element) {
+    const citations = captureCitations(element);
     return {
       element,
       text: readProseText(element),
+      providerText: readProviderText(element, citations),
       originalNodes: cloneChildNodes(element),
       links: captureLinks(element),
-      citations: captureCitations(element),
+      citations,
     };
   }
 
   function readProseText(element) {
     const clone = element.cloneNode(true);
-    for (const citation of clone.querySelectorAll(CITATION_SELECTOR)) citation.remove();
+    for (const citation of topLevelCitations(clone)) citation.remove();
+    return normalizeText(clone.textContent ?? "");
+  }
+
+  function readProviderText(element, citations) {
+    const clone = element.cloneNode(true);
+    const clonedCitations = topLevelCitations(clone);
+    if (clonedCitations.length !== citations.length) {
+      throw new Error("Plainly could not align Wikipedia citations");
+    }
+
+    clonedCitations.forEach((citation, index) => {
+      citation.replaceWith(document.createTextNode(citations[index].marker));
+    });
     return normalizeText(clone.textContent ?? "");
   }
 
@@ -199,9 +238,66 @@
   }
 
   function captureCitations(element) {
+    return topLevelCitations(element).map((citation, index) => ({
+      marker: citationMarker(index),
+      node: citation.cloneNode(true),
+    }));
+  }
+
+  function topLevelCitations(element) {
     return [...element.querySelectorAll(CITATION_SELECTOR)]
-      .filter((citation) => !citation.parentElement?.closest(CITATION_SELECTOR))
-      .map((citation) => citation.cloneNode(true));
+      .filter((citation) => !citation.parentElement?.closest(CITATION_SELECTOR));
+  }
+
+  function citationMarker(index) {
+    return `⟦PLAINLY_CITATION_${alphabeticIndex(index)}⟧`;
+  }
+
+  function alphabeticIndex(index) {
+    let value = index + 1;
+    let result = "";
+    while (value > 0) {
+      value -= 1;
+      result = String.fromCharCode(65 + (value % 26)) + result;
+      value = Math.floor(value / 26);
+    }
+    return result;
+  }
+
+  function parseAdjustedCitations(rawText, expectedMarkers) {
+    if (typeof rawText !== "string" || rawText.trim().length === 0) return null;
+
+    const normalized = normalizeText(rawText);
+    const markers = normalized.match(CITATION_MARKER_PATTERN) ?? [];
+    if (!sameSequence(markers, expectedMarkers)) return null;
+    if (normalized.includes("PLAINLY_CITATION") && markers.length === 0 && expectedMarkers.length === 0) {
+      return null;
+    }
+
+    const compact = normalized.replace(/\s+(?=⟦PLAINLY_CITATION_[A-Z]+⟧)/g, "");
+    CITATION_MARKER_PATTERN.lastIndex = 0;
+
+    let rawCursor = 0;
+    let cleanText = "";
+    const positions = [];
+    let match;
+    while ((match = CITATION_MARKER_PATTERN.exec(compact)) !== null) {
+      cleanText += compact.slice(rawCursor, match.index);
+      positions.push(cleanText.length);
+      rawCursor = match.index + match[0].length;
+    }
+    cleanText += compact.slice(rawCursor);
+    CITATION_MARKER_PATTERN.lastIndex = 0;
+
+    if (cleanText.includes("PLAINLY_CITATION")) return null;
+    if (cleanText.trim() !== cleanText || cleanText.length === 0) return null;
+    if (positions.some((position) => position <= 0 || position > cleanText.length)) return null;
+
+    return { text: cleanText, positions };
+  }
+
+  function sameSequence(actual, expected) {
+    return actual.length === expected.length && actual.every((value, index) => value === expected[index]);
   }
 
   function applyDecisions(decisions, blocksByKey, indicator) {
@@ -214,11 +310,19 @@
       }
 
       if (decision.state === "ready" && decision.text) {
-        const adjustedNodes = buildAdjustedNodes(decision.text, block.links, block.citations);
+        const citationPlacements = block.citationPlacements ?? [];
+        if (citationPlacements.length !== block.citations.length) {
+          allReady = false;
+          block.element.dataset.plainlyState = "error";
+          console.warn(`Plainly rejected ${decision.key}: citation placement metadata is incomplete`);
+          continue;
+        }
+
+        const adjustedNodes = buildAdjustedNodes(decision.text, block.links, citationPlacements);
         if (!adjustedNodes) {
           allReady = false;
           block.element.dataset.plainlyState = "error";
-          console.warn(`Plainly rejected ${decision.key}: adjusted text dropped a linked source term`);
+          console.warn(`Plainly rejected ${decision.key}: source links or citations could not be reattached safely`);
           continue;
         }
 
@@ -236,41 +340,68 @@
     return allReady;
   }
 
-  function buildAdjustedNodes(text, links, citations) {
+  function buildAdjustedNodes(text, links, citationPlacements) {
     const adjustedText = text.trim();
-    const ranges = [];
+    const linkRanges = [];
 
     for (const link of links) {
-      const range = findUnclaimedRange(adjustedText, link.text, ranges);
+      const range = findUnclaimedRange(adjustedText, link.text, linkRanges);
       if (!range) return null;
-      ranges.push({ ...range, link });
+      linkRanges.push({ ...range, link });
+    }
+    linkRanges.sort((left, right) => left.start - right.start);
+
+    const citations = [...citationPlacements].sort((left, right) => left.position - right.position);
+    for (const citation of citations) {
+      if (citation.position < 0 || citation.position > adjustedText.length) return null;
+      const insideLink = linkRanges.some((range) => (
+        citation.position > range.start && citation.position < range.end
+      ));
+      if (insideLink) return null;
     }
 
-    ranges.sort((left, right) => left.start - right.start);
     const nodes = [];
     let cursor = 0;
-    for (const range of ranges) {
-      if (range.start > cursor) {
-        nodes.push(document.createTextNode(adjustedText.slice(cursor, range.start)));
+    let citationIndex = 0;
+
+    const appendPlainThrough = (target, includeAtTarget) => {
+      while (citationIndex < citations.length) {
+        const citation = citations[citationIndex];
+        const beforeTarget = citation.position < target;
+        const atIncludedTarget = includeAtTarget && citation.position === target;
+        if (!beforeTarget && !atIncludedTarget) break;
+        if (citation.position < cursor) return false;
+        if (citation.position > cursor) {
+          nodes.push(document.createTextNode(adjustedText.slice(cursor, citation.position)));
+        }
+        nodes.push(citation.node.cloneNode(true));
+        cursor = citation.position;
+        citationIndex += 1;
       }
 
-      const linkedText = adjustedText.slice(range.start, range.end);
+      if (target > cursor) {
+        nodes.push(document.createTextNode(adjustedText.slice(cursor, target)));
+      }
+      cursor = target;
+      return true;
+    };
+
+    for (const range of linkRanges) {
+      if (!appendPlainThrough(range.start, true)) return null;
+
       const linkedNode = range.link.node.cloneNode(true);
-      linkedNode.textContent = linkedText;
+      linkedNode.textContent = adjustedText.slice(range.start, range.end);
       nodes.push(linkedNode);
       cursor = range.end;
+
+      while (citationIndex < citations.length && citations[citationIndex].position === range.end) {
+        nodes.push(citations[citationIndex].node.cloneNode(true));
+        citationIndex += 1;
+      }
     }
 
-    if (cursor < adjustedText.length) {
-      nodes.push(document.createTextNode(adjustedText.slice(cursor)));
-    }
-
-    if (citations.length > 0) {
-      nodes.push(document.createTextNode(" "));
-      nodes.push(...cloneNodes(citations));
-    }
-
-    return nodes;
+    if (!appendPlainThrough(adjustedText.length, true)) return null;
+    return citationIndex === citations.length ? nodes : null;
   }
 
   function findUnclaimedRange(text, linkedText, claimedRanges) {
