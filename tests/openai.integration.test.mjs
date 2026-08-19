@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
-import { simplifyWithOpenAI } from "../extension/openai.js";
+import {
+  DEFAULT_REASONING_EFFORT,
+  DEFAULT_VERBOSITY,
+  simplifyWithOpenAI,
+} from "../extension/openai.js";
 
 const TEST_KEY = "sk-test-plainly-integration-key";
 
@@ -23,7 +27,7 @@ test("calls the OpenAI Responses API with the user key and maps structured block
         content: [{
           type: "output_text",
           text: JSON.stringify({
-            blocks: [{ id: "block-0", text: "Plants turn light into usable energy." }],
+            blocks: [{ id: "stable-key-0", text: "Plants turn light into usable energy." }],
           }),
         }],
       }],
@@ -43,7 +47,7 @@ test("calls the OpenAI Responses API with the user key and maps structured block
         title: "Photosynthesis",
         level: 2,
         blocks: [{
-          id: "block-0",
+          id: "stable-key-0",
           text: "Photosynthesis is a system of biological processes by which phototrophic organisms convert light energy into chemical energy.",
         }],
       },
@@ -52,9 +56,12 @@ test("calls the OpenAI Responses API with the user key and maps structured block
     assert.equal(receivedAuthorization, `Bearer ${TEST_KEY}`);
     assert.equal(receivedBody.model, "gpt-5-mini");
     assert.equal(receivedBody.store, false);
+    assert.equal(receivedBody.reasoning.effort, DEFAULT_REASONING_EFFORT);
+    assert.equal(receivedBody.text.verbosity, DEFAULT_VERBOSITY);
     assert.equal(receivedBody.text.format.type, "json_schema");
+    assert.match(receivedBody.input[0].content[0].text, /Do not add facts, definitions/);
     assert.match(receivedBody.input[1].content[0].text, /Photosynthesis/);
-    assert.deepEqual(result, [{ id: "block-0", text: "Plants turn light into usable energy." }]);
+    assert.deepEqual(result, [{ id: "stable-key-0", text: "Plants turn light into usable energy." }]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }

@@ -1,9 +1,11 @@
 export const DEFAULT_OPENAI_API_URL = "https://api.openai.com/v1/responses";
 export const DEFAULT_MODEL = "gpt-5-mini";
+export const DEFAULT_REASONING_EFFORT = "minimal";
+export const DEFAULT_VERBOSITY = "low";
 
 const LEVEL_GUIDANCE = Object.freeze({
-  1: "Use very common words, short sentences, one main idea per sentence, and explain essential subject words in simple language.",
-  2: "Use common vocabulary and mostly short sentences. Keep essential subject vocabulary, but explain unfamiliar terms in context.",
+  1: "Use very common words, short sentences, one main idea per sentence, and explain essential subject words in simple language only when the source itself explains them.",
+  2: "Use common vocabulary and mostly short sentences. Keep essential subject vocabulary, but explain unfamiliar terms only when the source itself provides that explanation.",
   3: "Use clear secondary-school language. Reduce sentence complexity while preserving important domain terminology and nuance.",
 });
 
@@ -26,6 +28,9 @@ export async function simplifyWithOpenAI({
     body: JSON.stringify({
       model,
       store: false,
+      reasoning: {
+        effort: DEFAULT_REASONING_EFFORT,
+      },
       input: [
         {
           role: "system",
@@ -34,7 +39,7 @@ export async function simplifyWithOpenAI({
             text: [
               "You adjust Wikipedia prose to a specified reading level.",
               "Use only information present in the supplied source text.",
-              "Do not add facts, examples, explanations, causes, or conclusions from your own knowledge.",
+              "Do not add facts, definitions, examples, explanations, causes, or conclusions from your own knowledge.",
               "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
               "Simplify syntax and vocabulary without removing information needed to understand the source.",
               "Return one adjusted string for every supplied block id.",
@@ -55,6 +60,7 @@ export async function simplifyWithOpenAI({
         },
       ],
       text: {
+        verbosity: DEFAULT_VERBOSITY,
         format: {
           type: "json_schema",
           name: "plainly_adjusted_blocks",
