@@ -15,8 +15,15 @@ kotlin {
     }
 
     js {
+        outputModuleName = "PlainlyKmp"
+        browser {
+            webpackTask {
+                mainOutputFileName = "plainly-core.js"
+            }
+        }
         nodejs()
-        binaries.library()
+        binaries.executable()
+        generateTypeScriptDefinitions()
     }
 
     listOf(

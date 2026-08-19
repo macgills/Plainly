@@ -34,3 +34,12 @@ jobs:
           gradle-version: "9.5.0"
       - name: Test JVM and JavaScript targets
         run: gradle -p core --no-daemon jvmTest jsNodeTest compileKotlinJs compileCommonMainKotlinMetadata
+      - name: Build browser bundle
+        run: gradle -p core --no-daemon jsBrowserProductionWebpack
+      - name: Publish browser bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-kmp-browser-${{ github.run_number }}
+          path: core/build/kotlin-webpack/js/productionExecutable/plainly-core.js
+          if-no-files-found: error
+          retention-days: 7

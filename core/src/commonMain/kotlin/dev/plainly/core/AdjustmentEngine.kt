@@ -38,59 +38,33 @@ class AdjustmentEngine(
         readingLevel: ReadingLevel,
         emit: (AdjustmentEvent) -> Unit,
     ) {
-        val orderedBlocks = page.blocks.sortedBy(SourceBlock::order)
-        if (orderedBlocks.isEmpty()) {
-            emit(AdjustmentEvent.Complete)
-            return
-        }
+        val session = AdjustmentSession(
+            page = page,
+            readingLevel = readingLevel,
+            fidelityGuard = fidelityGuard,
+            firstBatchSize = firstBatchSize,
+            batchSize = batchSize,
+        )
 
-        for (batch in planBatches(orderedBlocks)) {
-            emit(AdjustmentEvent.Pending(batch))
-            val response = try {
-                provider.adjust(
-                    AdjustmentRequest(
-                        readingLevel = readingLevel,
-                        pageUrl = page.url,
-                        pageTitle = page.title,
-                        blocks = batch,
-                    ),
-                )
+        while (!session.isComplete) {
+            val request = session.nextRequest() ?: break
+            emit(AdjustmentEvent.Pending(request.blocks))
+
+            val events = try {
+                session.accept(provider.adjust(request))
             } catch (error: Throwable) {
-                emit(AdjustmentEvent.Failed(batch, error.message ?: error::class.simpleName ?: "Adjustment failed"))
-                continue
+                session.fail(error.message ?: error::class.simpleName ?: "Adjustment failed")
             }
-
-            val adjustedByKey = response.blocks.associateBy(AdjustedBlock::key)
-            for (source in batch) {
-                val adjusted = adjustedByKey[source.key]
-                if (adjusted == null) {
-                    emit(AdjustmentEvent.Failed(listOf(source), "Provider omitted ${source.key.value}"))
-                    continue
-                }
-
-                val issues = fidelityGuard.validate(source, adjusted)
-                if (issues.isEmpty()) {
-                    emit(AdjustmentEvent.Ready(source, adjusted))
-                } else {
-                    emit(AdjustmentEvent.Rejected(source, adjusted, issues))
-                }
-            }
+            events.forEach(emit)
         }
 
         emit(AdjustmentEvent.Complete)
     }
 
-    internal fun planBatches(blocks: List<SourceBlock>): List<List<SourceBlock>> {
-        if (blocks.isEmpty()) return emptyList()
-
-        val firstEnd = minOf(firstBatchSize, blocks.size)
-        val result = mutableListOf(blocks.subList(0, firstEnd))
-        var cursor = firstEnd
-        while (cursor < blocks.size) {
-            val end = minOf(cursor + batchSize, blocks.size)
-            result += blocks.subList(cursor, end)
-            cursor = end
-        }
-        return result
-    }
+    internal fun planBatches(blocks: List<SourceBlock>): List<List<SourceBlock>> =
+        AdjustmentSession.planBatches(
+            blocks = blocks,
+            firstBatchSize = firstBatchSize,
+            batchSize = batchSize,
+        )
 }
