@@ -24,7 +24,7 @@ class AdjustmentEngineTest {
 
         AdjustmentEngine(provider).adjust(page, ReadingLevel.of(2), events::add)
 
-        assertEquals(listOf(1, 4, 2), requests.map(List<BlockKey>::size))
+        assertEquals(listOf(1, 4, 2), requests.map { it.size })
         assertEquals(7, events.count { it is AdjustmentEvent.Ready })
         assertIs<AdjustmentEvent.Complete>(events.last())
     }

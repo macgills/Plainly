@@ -1,7 +1,6 @@
 package dev.plainly.core
 
-@JvmInline
-value class ReadingLevel private constructor(val value: Int) {
+data class ReadingLevel private constructor(val value: Int) {
     companion object {
         fun of(value: Int): ReadingLevel {
             require(value in 1..5) { "Reading level must be between 1 and 5" }

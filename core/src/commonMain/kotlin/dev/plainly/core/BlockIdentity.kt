@@ -1,7 +1,6 @@
 package dev.plainly.core
 
-@JvmInline
-value class BlockKey(val value: String)
+data class BlockKey(val value: String)
 
 object BlockIdentity {
     fun from(sourceText: String, occurrence: Int = 0): BlockKey {
