@@ -9,7 +9,7 @@ import {
   toSafariManifest,
 } from "../tools/safari-manifest.mjs";
 
-test("converts the Chrome module service worker to a non-persistent Safari background page", () => {
+test("converts the Chrome module service worker to Safari MV3 background scripts", () => {
   const chromeManifest = {
     manifest_version: 3,
     background: {
@@ -22,7 +22,6 @@ test("converts the Chrome module service worker to a non-persistent Safari backg
 
   assert.deepEqual(safariManifest.background, {
     scripts: ["background-safari.js"],
-    persistent: false,
   });
   assert.deepEqual(chromeManifest.background, {
     service_worker: "background.js",
@@ -75,7 +74,6 @@ test("assembles a Safari extension without dropping the generated KMP runtime", 
     const manifest = JSON.parse(await readFile(path.join(target, "manifest.json"), "utf8"));
     assert.deepEqual(manifest.background, {
       scripts: ["background-safari.js"],
-      persistent: false,
     });
     const safariBackground = await readFile(path.join(target, "background-safari.js"), "utf8");
     assert.match(safariBackground, /async function simplifyWithOpenAI/);
