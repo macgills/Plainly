@@ -103,6 +103,31 @@ jobs:
             exit 1
           fi
 
+          PBXPROJ="$PROJECT/project.pbxproj"
+          python3 - "$PBXPROJ" <<'PY'
+          from pathlib import Path
+          import sys
+
+          project = Path(sys.argv[1])
+          text = project.read_text(encoding="utf-8")
+          generated_host_id = "dev.plainly.Plainly"
+          desired_host_id = "dev.plainly.browser"
+          occurrences = text.count(generated_host_id)
+          if occurrences == 0:
+              raise SystemExit(f"Generated Xcode project did not contain expected host bundle id {generated_host_id}")
+          project.write_text(text.replace(generated_host_id, desired_host_id), encoding="utf-8")
+          print(f"Normalized {occurrences} generated host bundle identifier setting(s) to {desired_host_id}")
+          PY
+
+          if ! grep -Fq 'PRODUCT_BUNDLE_IDENTIFIER = dev.plainly.browser;' "$PBXPROJ"; then
+            echo "::error::Generated host target does not use dev.plainly.browser"
+            exit 1
+          fi
+          if ! grep -Fq 'PRODUCT_BUNDLE_IDENTIFIER = dev.plainly.browser.Extension;' "$PBXPROJ"; then
+            echo "::error::Generated extension target does not use dev.plainly.browser.Extension"
+            exit 1
+          fi
+
           xcodebuild -project "$PROJECT" -list -json > artifacts-safari/xcode-project.json
           SCHEME="$(python3 - <<'PY'
           import json
@@ -140,6 +165,17 @@ jobs:
             exit 1
           fi
 
+          APP_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          APPEX_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APPEX/Info.plist")"
+          if [ "$APP_BUNDLE_ID" != 'dev.plainly.browser' ]; then
+            echo "::error::Unexpected host bundle identifier: $APP_BUNDLE_ID"
+            exit 1
+          fi
+          if [ "$APPEX_BUNDLE_ID" != 'dev.plainly.browser.Extension' ]; then
+            echo "::error::Unexpected extension bundle identifier: $APPEX_BUNDLE_ID"
+            exit 1
+          fi
+
           FRAMEWORK='core/build/bin/iosSimulatorArm64/debugFramework/PlainlyCore.framework'
           if [ ! -d "$FRAMEWORK" ]; then
             echo "::error::KMP iOS simulator framework was not produced"
@@ -158,9 +194,11 @@ jobs:
           Xcode project: $PROJECT
           Xcode scheme: $SCHEME
           Simulator app: $APP
+          Host bundle identifier: $APP_BUNDLE_ID
           Embedded extension: $APPEX
+          Extension bundle identifier: $APPEX_BUNDLE_ID
           KMP framework: $FRAMEWORK
-          Safari manifest background uses module scripts; Chrome manifest remains a module service worker.
+          Safari uses a classic MV3 background script bundle; Chrome remains a module service worker.
           EOF
       - name: Publish Safari/iPad build proof
         uses: actions/upload-artifact@v4
