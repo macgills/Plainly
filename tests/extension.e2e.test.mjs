@@ -12,6 +12,7 @@ const TEST_KEY = "sk-test-plainly-browser-integration-key";
 const SLOW_TEST_KEY = "sk-test-plainly-slow-browser-integration-key";
 const FAIL_TEST_KEY = "sk-test-plainly-fail-browser-integration-key";
 const DROP_LINK_TEST_KEY = "sk-test-plainly-drop-link-integration-key";
+const DROP_CITATION_TEST_KEY = "sk-test-plainly-drop-citation-integration-key";
 
 const fakeOpenAIAdapter = `
 export async function simplifyWithOpenAI({ apiKey, payload }) {
@@ -28,7 +29,7 @@ export async function simplifyWithOpenAI({ apiKey, payload }) {
     throw new Error("Expected stable KMP block keys, not legacy DOM indexes");
   }
   if (payload.blocks.some((block) => block.text.includes("[1]"))) {
-    throw new Error("Citation markers must not enter simplification or KMP fidelity prose");
+    throw new Error("Human-readable citation labels must not enter simplification or KMP fidelity prose");
   }
 
   const linkedIntro = payload.blocks.find((block) => block.text.startsWith("Photosynthesis is"));
@@ -36,14 +37,35 @@ export async function simplifyWithOpenAI({ apiKey, payload }) {
     throw new Error("Expected Wikipedia link text to be protected in the provider request");
   }
 
-  return payload.blocks.map((block) => ({
-    id: block.id,
-    text: block.text.startsWith("Photosynthesis is")
-      ? (apiKey.includes("drop-link")
-        ? "Photosynthesis turns light into energy organisms can use."
-        : "Plants use photosynthesis to turn light into energy they can use.")
-      : "Most photosynthesis also releases oxygen as a waste product.",
-  }));
+  const citedOverview = payload.blocks.find((block) => block.text.startsWith("In most cases"));
+  if (citedOverview) {
+    const markers = citedOverview.protectedCitationMarkers ?? [];
+    if (markers.length !== 1 || !/^⟦PLAINLY_CITATION_[A-Z]+⟧$/.test(markers[0])) {
+      throw new Error("Expected one opaque protected citation marker");
+    }
+    if (!citedOverview.text.includes(markers[0])) {
+      throw new Error("Expected the opaque citation marker at its source position in provider text");
+    }
+  }
+
+  return payload.blocks.map((block) => {
+    if (block.text.startsWith("Photosynthesis is")) {
+      return {
+        id: block.id,
+        text: apiKey.includes("drop-link")
+          ? "Photosynthesis turns light into energy organisms can use."
+          : "Plants use photosynthesis to turn light into energy they can use.",
+      };
+    }
+
+    const marker = block.protectedCitationMarkers?.[0] ?? "";
+    return {
+      id: block.id,
+      text: apiKey.includes("drop-citation")
+        ? "Most photosynthesis releases oxygen as a waste product. It also makes carbohydrates that store energy for later."
+        : \`Most photosynthesis releases oxygen as a waste product. \${marker} It also makes carbohydrates that store energy for later.\`,
+    };
+  });
 }
 `;
 
@@ -119,7 +141,7 @@ test("adjusted mode persists across normal Wikipedia navigation", async ({ conte
   await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Level 3");
 });
 
-test("preserves Wikipedia links and citations across adjusted and original modes", async ({ context, extensionId }) => {
+test("preserves Wikipedia links and citation positions across adjusted and original modes", async ({ context, extensionId }) => {
   await configureExtension(context, extensionId, { apiKey: TEST_KEY, level: 2 });
 
   const page = await openWikipedia(context, "Photosynthesis");
@@ -129,23 +151,32 @@ test("preserves Wikipedia links and citations across adjusted and original modes
   const citation = second.locator('sup.reference a[href="#cite_note-1"]');
   const indicator = page.locator("#plainly-indicator");
 
+  await expect(second).toHaveAttribute("data-plainly-state", "ready");
   await expect(intro).toHaveText("Plants use photosynthesis to turn light into energy they can use.");
   await expect(plantLink).toHaveText("Plants");
   await expect(plantLink).toHaveAttribute("title", "Plant");
-  await expect(second).toContainText("Most photosynthesis also releases oxygen as a waste product.");
   await expect(citation).toHaveText("[1]");
+  expect(await second.evaluate((element) => element.textContent)).toBe(
+    "Most photosynthesis releases oxygen as a waste product.[1] It also makes carbohydrates that store energy for later.",
+  );
 
   await indicator.click();
   await expect(indicator).toHaveText("Plainly · Original");
   await expect(intro).toContainText("Photosynthesis is a system of biological processes");
   await expect(plantLink).toHaveText("plants");
   await expect(citation).toHaveText("[1]");
+  expect(await second.evaluate((element) => element.textContent)).toBe(
+    "In most cases, photosynthesis releases oxygen as a waste product.[1] It also produces carbohydrates that store chemical energy for the organism to use later.",
+  );
 
   await indicator.click();
   await expect(indicator).toHaveText("Plainly · Level 2");
   await expect(intro).toHaveText("Plants use photosynthesis to turn light into energy they can use.");
   await expect(plantLink).toHaveText("Plants");
   await expect(citation).toHaveText("[1]");
+  expect(await second.evaluate((element) => element.textContent)).toBe(
+    "Most photosynthesis releases oxygen as a waste product.[1] It also makes carbohydrates that store energy for later.",
+  );
 });
 
 test("fails open with the original linked prose if adjustment drops a protected link term", async ({ context, extensionId }) => {
@@ -159,6 +190,23 @@ test("fails open with the original linked prose if adjustment drops a protected 
   await expect(intro).toBeVisible();
   await expect(plantLink).toHaveText("plants");
   await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Couldn’t adjust");
+});
+
+test("fails open with the original cited prose if adjustment drops a citation marker", async ({ context, extensionId }) => {
+  await configureExtension(context, extensionId, { apiKey: DROP_CITATION_TEST_KEY, level: 2 });
+
+  const page = await openWikipedia(context, "Photosynthesis");
+  const second = page.locator("#second");
+  const citation = second.locator('sup.reference a[href="#cite_note-1"]');
+
+  await expect(page.locator("#intro")).toHaveAttribute("data-plainly-state", "ready");
+  await expect(second).toHaveAttribute("data-plainly-state", "error");
+  await expect(second).toBeVisible();
+  await expect(citation).toHaveText("[1]");
+  expect(await second.evaluate((element) => element.textContent)).toBe(
+    "In most cases, photosynthesis releases oxygen as a waste product.[1] It also produces carbohydrates that store chemical energy for the organism to use later.",
+  );
+  await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Level 2");
 });
 
 test("restores original prose if OpenAI fails instead of leaving the page blocked", async ({ context, extensionId }) => {
