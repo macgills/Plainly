@@ -17,7 +17,7 @@ class FidelityGuard(
 }
 
 object NumbersPreservedRule : FidelityRule {
-    private val numberToken = Regex("(?<![\\p{L}\\p{N}])\\d[\\d,.:/%-]*(?![\\p{L}\\p{N}])")
+    private val numberToken = Regex("\\d+(?:[.,:/-]\\d+)*(?:%)?")
 
     override fun validate(source: SourceBlock, adjusted: AdjustedBlock): FidelityIssue? {
         val sourceNumbers = numberToken.findAll(source.text).map { it.value }.toList()

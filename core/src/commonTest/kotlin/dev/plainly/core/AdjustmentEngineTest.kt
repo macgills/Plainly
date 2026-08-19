@@ -9,54 +9,60 @@ import kotlin.test.assertIs
 
 class AdjustmentEngineTest {
     @Test
-    fun firstBlockIsPrioritizedThenRemainingBlocksAreBatched() = runSuspending {
-        val page = pageWithBlocks(7)
-        val requests = mutableListOf<List<BlockKey>>()
-        val events = mutableListOf<AdjustmentEvent>()
-        val provider = AdjustmentProvider { request ->
-            requests += request.blocks.map(SourceBlock::key)
-            AdjustmentResponse(
-                request.blocks.map { source ->
-                    AdjustedBlock(source.key, "Simpler ${source.text}")
-                },
-            )
+    fun firstBlockIsPrioritizedThenRemainingBlocksAreBatched() {
+        runSuspending {
+            val page = pageWithBlocks(7)
+            val requests = mutableListOf<List<BlockKey>>()
+            val events = mutableListOf<AdjustmentEvent>()
+            val provider = AdjustmentProvider { request ->
+                requests += request.blocks.map(SourceBlock::key)
+                AdjustmentResponse(
+                    request.blocks.map { source ->
+                        AdjustedBlock(source.key, "Simpler ${source.text}")
+                    },
+                )
+            }
+
+            AdjustmentEngine(provider).adjust(page, ReadingLevel.of(2), events::add)
+
+            assertEquals(listOf(1, 4, 2), requests.map { it.size })
+            assertEquals(7, events.count { it is AdjustmentEvent.Ready })
+            assertIs<AdjustmentEvent.Complete>(events.last())
         }
-
-        AdjustmentEngine(provider).adjust(page, ReadingLevel.of(2), events::add)
-
-        assertEquals(listOf(1, 4, 2), requests.map { it.size })
-        assertEquals(7, events.count { it is AdjustmentEvent.Ready })
-        assertIs<AdjustmentEvent.Complete>(events.last())
     }
 
     @Test
-    fun providerFailureFallsBackPerBatchAndProcessingContinues() = runSuspending {
-        val page = pageWithBlocks(3)
-        var calls = 0
-        val events = mutableListOf<AdjustmentEvent>()
-        val provider = AdjustmentProvider { request ->
-            calls += 1
-            if (calls == 1) error("network down")
-            AdjustmentResponse(request.blocks.map { AdjustedBlock(it.key, "Simpler ${it.text}") })
+    fun providerFailureFallsBackPerBatchAndProcessingContinues() {
+        runSuspending {
+            val page = pageWithBlocks(3)
+            var calls = 0
+            val events = mutableListOf<AdjustmentEvent>()
+            val provider = AdjustmentProvider { request ->
+                calls += 1
+                if (calls == 1) error("network down")
+                AdjustmentResponse(request.blocks.map { AdjustedBlock(it.key, "Simpler ${it.text}") })
+            }
+
+            AdjustmentEngine(provider, batchSize = 2).adjust(page, ReadingLevel.of(1), events::add)
+
+            assertEquals(1, events.count { it is AdjustmentEvent.Failed })
+            assertEquals(2, events.count { it is AdjustmentEvent.Ready })
+            assertIs<AdjustmentEvent.Complete>(events.last())
         }
-
-        AdjustmentEngine(provider, batchSize = 2).adjust(page, ReadingLevel.of(1), events::add)
-
-        assertEquals(1, events.count { it is AdjustmentEvent.Failed })
-        assertEquals(2, events.count { it is AdjustmentEvent.Ready })
-        assertIs<AdjustmentEvent.Complete>(events.last())
     }
 
     @Test
-    fun missingProviderBlockIsReportedAsFailure() = runSuspending {
-        val page = pageWithBlocks(1)
-        val events = mutableListOf<AdjustmentEvent>()
-        val provider = AdjustmentProvider { AdjustmentResponse(emptyList()) }
+    fun missingProviderBlockIsReportedAsFailure() {
+        runSuspending {
+            val page = pageWithBlocks(1)
+            val events = mutableListOf<AdjustmentEvent>()
+            val provider = AdjustmentProvider { AdjustmentResponse(emptyList()) }
 
-        AdjustmentEngine(provider).adjust(page, ReadingLevel.of(2), events::add)
+            AdjustmentEngine(provider).adjust(page, ReadingLevel.of(2), events::add)
 
-        val failure = events.filterIsInstance<AdjustmentEvent.Failed>().single()
-        assertEquals(page.blocks, failure.blocks)
+            val failure = events.filterIsInstance<AdjustmentEvent.Failed>().single()
+            assertEquals(page.blocks, failure.blocks)
+        }
     }
 
     private fun pageWithBlocks(count: Int): PageSnapshot = PageSnapshot(
