@@ -37,6 +37,132 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  safari-ios:
+    name: Safari iPad package
+    needs: core
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: plainly-kmp-browser
+          path: extension/generated
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+      - name: Link KMP iOS simulator framework
+        run: gradle -p core --no-daemon linkDebugFrameworkIosSimulatorArm64
+      - name: Package and build Safari Web Extension for iPad simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if xcrun --find safari-web-extension-packager >/dev/null 2>&1; then
+            PACKAGER=safari-web-extension-packager
+          elif xcrun --find safari-web-extension-converter >/dev/null 2>&1; then
+            PACKAGER=safari-web-extension-converter
+          else
+            echo "::error::Xcode does not provide a Safari Web Extension packager"
+            exit 1
+          fi
+
+          rm -rf safari-generated safari-derived artifacts-safari
+          mkdir -p safari-generated artifacts-safari
+
+          xcodebuild -version | tee artifacts-safari/xcode-version.txt
+          echo "Safari packager: $PACKAGER" | tee artifacts-safari/packager-tool.txt
+
+          xcrun "$PACKAGER" extension \
+            --project-location "$PWD/safari-generated" \
+            --app-name Plainly \
+            --bundle-identifier dev.plainly.browser \
+            --swift \
+            --ios-only \
+            --copy-resources \
+            --no-open \
+            --no-prompt 2>&1 | tee artifacts-safari/packager.log
+
+          if grep -Eiq 'not supported by (your )?(current version of )?Safari' artifacts-safari/packager.log; then
+            echo "::error::Safari packager reported unsupported manifest keys"
+            exit 1
+          fi
+
+          PROJECT="$(find safari-generated -name '*.xcodeproj' -print -quit)"
+          if [ -z "$PROJECT" ]; then
+            echo "::error::Safari packager did not create an Xcode project"
+            exit 1
+          fi
+
+          xcodebuild -project "$PROJECT" -list -json > artifacts-safari/xcode-project.json
+          SCHEME="$(python3 - <<'PY'
+          import json
+          with open('artifacts-safari/xcode-project.json', encoding='utf-8') as handle:
+              project = json.load(handle)['project']
+          schemes = project.get('schemes', [])
+          preferred = [scheme for scheme in schemes if '(iOS)' in scheme and 'Extension' not in scheme]
+          if not schemes:
+              raise SystemExit('No Xcode schemes were generated')
+          print((preferred or schemes)[0])
+          PY
+          )"
+          echo "Building scheme: $SCHEME" | tee artifacts-safari/scheme.txt
+
+          xcodebuild \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$PWD/safari-derived" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            build 2>&1 | tee artifacts-safari/xcodebuild.log
+
+          APP="$(find safari-derived/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -print -quit)"
+          if [ -z "$APP" ]; then
+            echo "::error::Xcode did not produce an iOS simulator app"
+            exit 1
+          fi
+
+          APPEX="$(find "$APP" -name '*.appex' -print -quit)"
+          if [ -z "$APPEX" ]; then
+            echo "::error::Built app does not contain a Safari Web Extension"
+            exit 1
+          fi
+
+          FRAMEWORK='core/build/bin/iosSimulatorArm64/debugFramework/PlainlyCore.framework'
+          if [ ! -d "$FRAMEWORK" ]; then
+            echo "::error::KMP iOS simulator framework was not produced"
+            exit 1
+          fi
+
+          cp -R "$APP" artifacts-safari/
+          cp -R "$FRAMEWORK" artifacts-safari/
+          cp -R "$PROJECT" artifacts-safari/
+          cp extension/manifest.json artifacts-safari/manifest.json
+
+          cat > artifacts-safari/validation.txt <<EOF
+          Plainly Safari/iPad CI validation
+          Safari packager: $PACKAGER
+          Xcode project: $PROJECT
+          Xcode scheme: $SCHEME
+          Simulator app: $APP
+          Embedded extension: $APPEX
+          KMP framework: $FRAMEWORK
+          EOF
+      - name: Publish Safari/iPad build proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-safari-ios-${{ github.run_number }}
+          path: artifacts-safari/
+          if-no-files-found: error
+          retention-days: 30
+
   test:
     needs: core
     runs-on: ubuntu-latest
