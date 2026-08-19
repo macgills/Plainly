@@ -27,7 +27,7 @@ test("calls the OpenAI Responses API with the user key and maps structured block
         content: [{
           type: "output_text",
           text: JSON.stringify({
-            blocks: [{ id: "stable-key-0", text: "Plants turn light into usable energy." }],
+            blocks: [{ id: "stable-key-0", text: "Phototrophic organisms turn light into usable energy." }],
           }),
         }],
       }],
@@ -49,6 +49,7 @@ test("calls the OpenAI Responses API with the user key and maps structured block
         blocks: [{
           id: "stable-key-0",
           text: "Photosynthesis is a system of biological processes by which phototrophic organisms convert light energy into chemical energy.",
+          protectedLinkTexts: ["phototrophic organisms"],
         }],
       },
     });
@@ -60,8 +61,12 @@ test("calls the OpenAI Responses API with the user key and maps structured block
     assert.equal(receivedBody.text.verbosity, DEFAULT_VERBOSITY);
     assert.equal(receivedBody.text.format.type, "json_schema");
     assert.match(receivedBody.input[0].content[0].text, /Do not add facts, definitions/);
-    assert.match(receivedBody.input[1].content[0].text, /Photosynthesis/);
-    assert.deepEqual(result, [{ id: "stable-key-0", text: "Plants turn light into usable energy." }]);
+    assert.match(receivedBody.input[0].content[0].text, /protectedLinkTexts/);
+
+    const providerInput = JSON.parse(receivedBody.input[1].content[0].text);
+    assert.equal(providerInput.title, "Photosynthesis");
+    assert.deepEqual(providerInput.blocks[0].protectedLinkTexts, ["phototrophic organisms"]);
+    assert.deepEqual(result, [{ id: "stable-key-0", text: "Phototrophic organisms turn light into usable energy." }]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
