@@ -250,7 +250,23 @@ jobs:
           Host app launch: passed
           Safari uses a classic MV3 background service worker; Chrome remains a module service worker.
           EOF
-      - name: Publish Safari/iPad build proof
+      - name: Collect Safari diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p artifacts-safari
+          printf 'job_status=%s\n' '${{ job.status }}' > artifacts-safari/job-status.txt
+          if [ -f build/safari-extension/manifest.json ]; then
+            cp build/safari-extension/manifest.json artifacts-safari/safari-manifest.json
+          fi
+          if [ -f extension/manifest.json ]; then
+            cp extension/manifest.json artifacts-safari/chrome-manifest.json
+          fi
+          if [ -d safari-generated ] && [ ! -e artifacts-safari/safari-generated ]; then
+            cp -R safari-generated artifacts-safari/safari-generated
+          fi
+      - name: Publish Safari/iPad build proof and diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: plainly-safari-ios-${{ github.run_number }}
