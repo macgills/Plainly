@@ -2,19 +2,37 @@ import { cp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+const SAFARI_BACKGROUND = "background-safari.js";
+
 export function toSafariManifest(manifest) {
   const result = structuredClone(manifest);
-  const background = result.background;
 
-  if (background?.service_worker) {
-    const { service_worker: serviceWorker, ...rest } = background;
+  if (result.background?.service_worker) {
     result.background = {
-      ...rest,
-      scripts: [serviceWorker],
+      scripts: [SAFARI_BACKGROUND],
+      persistent: false,
     };
   }
 
   return result;
+}
+
+export function bundleSafariBackground(openAiModule, backgroundModule) {
+  const openAiClassic = openAiModule
+    .replace(/^export\s+const\s+/gm, "const ")
+    .replace(/^export\s+async\s+function\s+/gm, "async function ")
+    .replace(/^export\s+function\s+/gm, "function ");
+
+  const backgroundClassic = backgroundModule.replace(
+    /^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/,
+    "",
+  );
+
+  const bundled = `${openAiClassic.trim()}\n\n${backgroundClassic.trim()}\n`;
+  if (/^\s*(?:import|export)\b/m.test(bundled)) {
+    throw new Error("Safari background bundle still contains ES module syntax");
+  }
+  return bundled;
 }
 
 export async function assembleSafariExtension(sourcePath, targetPath) {
@@ -25,6 +43,14 @@ export async function assembleSafariExtension(sourcePath, targetPath) {
   const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
   const safariManifest = toSafariManifest(manifest);
   await writeFile(manifestPath, `${JSON.stringify(safariManifest, null, 2)}\n`, "utf8");
+
+  const openAiModule = await readFile(path.join(sourcePath, "openai.js"), "utf8");
+  const backgroundModule = await readFile(path.join(sourcePath, "background.js"), "utf8");
+  await writeFile(
+    path.join(targetPath, SAFARI_BACKGROUND),
+    bundleSafariBackground(openAiModule, backgroundModule),
+    "utf8",
+  );
 
   return safariManifest;
 }
