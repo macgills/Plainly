@@ -41,6 +41,8 @@ export async function simplifyWithOpenAI({
               "Use only information present in the supplied source text.",
               "Do not add facts, definitions, examples, explanations, causes, or conclusions from your own knowledge.",
               "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
+              "Each block may include protectedLinkTexts. Keep every listed linked term in that block's adjusted text with the same wording; capitalization may change only where normal sentence capitalization requires it.",
+              "Do not emit HTML, Markdown, URLs, or citation markers; the browser restores the original Wikipedia links and citations.",
               "Simplify syntax and vocabulary without removing information needed to understand the source.",
               "Return one adjusted string for every supplied block id.",
             ].join(" "),
@@ -137,5 +139,16 @@ function validatePayload(payload) {
       throw new Error("each block must contain a non-empty id and text");
     }
     if (block.text.length > 8_000) throw new Error("block text is too long");
+
+    if (block.protectedLinkTexts !== undefined) {
+      if (!Array.isArray(block.protectedLinkTexts) || block.protectedLinkTexts.length > 32) {
+        throw new Error("protectedLinkTexts must contain at most 32 linked terms");
+      }
+      for (const linkedText of block.protectedLinkTexts) {
+        if (typeof linkedText !== "string" || linkedText.trim().length === 0 || linkedText.length > 200) {
+          throw new Error("protectedLinkTexts entries must be non-empty strings up to 200 characters");
+        }
+      }
+    }
   }
 }
