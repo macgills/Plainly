@@ -14,6 +14,7 @@
     "style",
     "script",
   ].join(",");
+  const CITATION_SELECTOR = "sup.reference, .mw-ref";
 
   document.documentElement.classList.add("plainly-pending");
   void bootstrap();
@@ -42,6 +43,7 @@
       return;
     }
 
+    const prepared = elements.map(prepareReadableElement);
     const title = document.querySelector("#firstHeading")?.textContent?.trim() ?? document.title;
     let session;
     try {
@@ -49,7 +51,7 @@
         location.href,
         title,
         settings.level,
-        elements.map((element) => element.textContent ?? ""),
+        prepared.map((block) => block.text),
         1,
         4,
       );
@@ -69,7 +71,8 @@
     const blocks = sourceBlocks.map((source, index) => ({
       key: source.key,
       text: source.text,
-      element: elements[index],
+      ...prepared[index],
+      adjustedNodes: null,
     }));
     const blocksByKey = new Map(blocks.map((block) => [block.key, block]));
 
@@ -79,7 +82,7 @@
     }
 
     document.documentElement.classList.remove("plainly-pending");
-    const indicator = addIndicator(settings.level);
+    const indicator = addIndicator(settings.level, blocks);
     indicator.dataset.engine = "kmp";
 
     let firstBatch = true;
@@ -98,7 +101,14 @@
             level: settings.level,
             url: location.href,
             title,
-            blocks: requested.map(({ key, text }) => ({ id: key, text })),
+            blocks: requested.map(({ key, text }) => {
+              const block = blocksByKey.get(key);
+              return {
+                id: key,
+                text,
+                protectedLinkTexts: uniqueStrings(block?.links.map((link) => link.text) ?? []),
+              };
+            }),
           },
         });
 
@@ -108,7 +118,7 @@
           response.blocks.map((block) => block.id),
           response.blocks.map((block) => block.text),
         )];
-        const allReady = applyDecisions(decisions, blocksByKey);
+        const allReady = applyDecisions(decisions, blocksByKey, indicator);
 
         if (firstBatch && !allReady) {
           revealUnfinishedBlocks(blocks);
@@ -158,11 +168,43 @@
   function collectReadableElements() {
     return [...document.querySelectorAll(BLOCK_SELECTOR)].filter((element) => {
       if (element.closest(EXCLUDED_ANCESTORS)) return false;
-      return (element.textContent ?? "").replace(/\s+/g, " ").trim().length >= 40;
+      return readProseText(element).length >= 40;
     });
   }
 
-  function applyDecisions(decisions, blocksByKey) {
+  function prepareReadableElement(element) {
+    return {
+      element,
+      text: readProseText(element),
+      originalNodes: cloneChildNodes(element),
+      links: captureLinks(element),
+      citations: captureCitations(element),
+    };
+  }
+
+  function readProseText(element) {
+    const clone = element.cloneNode(true);
+    for (const citation of clone.querySelectorAll(CITATION_SELECTOR)) citation.remove();
+    return normalizeText(clone.textContent ?? "");
+  }
+
+  function captureLinks(element) {
+    return [...element.querySelectorAll("a[href]")]
+      .filter((link) => !link.closest(CITATION_SELECTOR))
+      .map((link) => ({
+        text: normalizeText(link.textContent ?? ""),
+        node: link.cloneNode(true),
+      }))
+      .filter((link) => link.text.length > 0);
+  }
+
+  function captureCitations(element) {
+    return [...element.querySelectorAll(CITATION_SELECTOR)]
+      .filter((citation) => !citation.parentElement?.closest(CITATION_SELECTOR))
+      .map((citation) => citation.cloneNode(true));
+  }
+
+  function applyDecisions(decisions, blocksByKey, indicator) {
     let allReady = true;
     for (const decision of decisions) {
       const block = blocksByKey.get(decision.key);
@@ -172,7 +214,18 @@
       }
 
       if (decision.state === "ready" && decision.text) {
-        block.element.textContent = decision.text;
+        const adjustedNodes = buildAdjustedNodes(decision.text, block.links, block.citations);
+        if (!adjustedNodes) {
+          allReady = false;
+          block.element.dataset.plainlyState = "error";
+          console.warn(`Plainly rejected ${decision.key}: adjusted text dropped a linked source term`);
+          continue;
+        }
+
+        block.adjustedNodes = cloneNodes(adjustedNodes);
+        if (indicator.dataset.mode !== "original") {
+          block.element.replaceChildren(...cloneNodes(adjustedNodes));
+        }
         block.element.dataset.plainlyState = "ready";
       } else {
         allReady = false;
@@ -183,6 +236,60 @@
     return allReady;
   }
 
+  function buildAdjustedNodes(text, links, citations) {
+    const adjustedText = text.trim();
+    const ranges = [];
+
+    for (const link of links) {
+      const range = findUnclaimedRange(adjustedText, link.text, ranges);
+      if (!range) return null;
+      ranges.push({ ...range, link });
+    }
+
+    ranges.sort((left, right) => left.start - right.start);
+    const nodes = [];
+    let cursor = 0;
+    for (const range of ranges) {
+      if (range.start > cursor) {
+        nodes.push(document.createTextNode(adjustedText.slice(cursor, range.start)));
+      }
+
+      const linkedText = adjustedText.slice(range.start, range.end);
+      const linkedNode = range.link.node.cloneNode(true);
+      linkedNode.textContent = linkedText;
+      nodes.push(linkedNode);
+      cursor = range.end;
+    }
+
+    if (cursor < adjustedText.length) {
+      nodes.push(document.createTextNode(adjustedText.slice(cursor)));
+    }
+
+    if (citations.length > 0) {
+      nodes.push(document.createTextNode(" "));
+      nodes.push(...cloneNodes(citations));
+    }
+
+    return nodes;
+  }
+
+  function findUnclaimedRange(text, linkedText, claimedRanges) {
+    const words = linkedText.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return null;
+
+    const pattern = words.map(escapeRegExp).join("\\s+");
+    const matcher = new RegExp(pattern, "giu");
+    let match;
+    while ((match = matcher.exec(text)) !== null) {
+      const candidate = { start: match.index, end: match.index + match[0].length };
+      const overlaps = claimedRanges.some((claimed) => (
+        candidate.start < claimed.end && claimed.start < candidate.end
+      ));
+      if (!overlaps) return candidate;
+    }
+    return null;
+  }
+
   function revealUnfinishedBlocks(blocks) {
     for (const block of blocks) {
       if (block.element.dataset.plainlyState === "loading") {
@@ -191,7 +298,7 @@
     }
   }
 
-  function addIndicator(level) {
+  function addIndicator(level, blocks) {
     const existing = document.getElementById("plainly-indicator");
     if (existing) return existing;
 
@@ -200,16 +307,13 @@
     indicator.type = "button";
     indicator.textContent = `Plainly · Level ${level}`;
     indicator.title = "Show original text";
+    indicator.dataset.mode = "adjusted";
     indicator.addEventListener("click", () => {
       const showingOriginal = indicator.dataset.mode === "original";
-      for (const element of document.querySelectorAll("[data-plainly-original]")) {
-        if (showingOriginal) {
-          const adjusted = element.dataset.plainlyAdjusted;
-          if (adjusted) element.textContent = adjusted;
-        } else {
-          element.dataset.plainlyAdjusted = element.textContent ?? "";
-          element.textContent = element.dataset.plainlyOriginal ?? "";
-        }
+      for (const block of blocks) {
+        if (!block.adjustedNodes) continue;
+        const nodes = showingOriginal ? block.adjustedNodes : block.originalNodes;
+        block.element.replaceChildren(...cloneNodes(nodes));
       }
       indicator.dataset.mode = showingOriginal ? "adjusted" : "original";
       indicator.textContent = showingOriginal ? `Plainly · Level ${level}` : "Plainly · Original";
@@ -223,5 +327,25 @@
     indicator.textContent = "Plainly · Couldn’t adjust";
     indicator.title = "Open Plainly and check your API key";
     indicator.disabled = true;
+  }
+
+  function cloneChildNodes(element) {
+    return cloneNodes([...element.childNodes]);
+  }
+
+  function cloneNodes(nodes) {
+    return nodes.map((node) => node.cloneNode(true));
+  }
+
+  function normalizeText(text) {
+    return text.replace(/\s+/g, " ").trim();
+  }
+
+  function uniqueStrings(values) {
+    return [...new Set(values)];
+  }
+
+  function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
 })();

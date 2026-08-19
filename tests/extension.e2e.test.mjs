@@ -11,6 +11,7 @@ const wikipediaFixture = await readFile(path.join(here, "fixtures/wikipedia.html
 const TEST_KEY = "sk-test-plainly-browser-integration-key";
 const SLOW_TEST_KEY = "sk-test-plainly-slow-browser-integration-key";
 const FAIL_TEST_KEY = "sk-test-plainly-fail-browser-integration-key";
+const DROP_LINK_TEST_KEY = "sk-test-plainly-drop-link-integration-key";
 
 const fakeOpenAIAdapter = `
 export async function simplifyWithOpenAI({ apiKey, payload }) {
@@ -26,11 +27,21 @@ export async function simplifyWithOpenAI({ apiKey, payload }) {
   if (payload.blocks.some((block) => block.id.startsWith("block-"))) {
     throw new Error("Expected stable KMP block keys, not legacy DOM indexes");
   }
+  if (payload.blocks.some((block) => block.text.includes("[1]"))) {
+    throw new Error("Citation markers must not enter simplification or KMP fidelity prose");
+  }
+
+  const linkedIntro = payload.blocks.find((block) => block.text.startsWith("Photosynthesis is"));
+  if (linkedIntro && !linkedIntro.protectedLinkTexts?.includes("plants")) {
+    throw new Error("Expected Wikipedia link text to be protected in the provider request");
+  }
 
   return payload.blocks.map((block) => ({
     id: block.id,
     text: block.text.startsWith("Photosynthesis is")
-      ? "Plants use photosynthesis to turn light into energy they can use."
+      ? (apiKey.includes("drop-link")
+        ? "Photosynthesis turns light into energy organisms can use."
+        : "Plants use photosynthesis to turn light into energy they can use.")
       : "Most photosynthesis also releases oxygen as a waste product.",
   }));
 }
@@ -106,6 +117,48 @@ test("adjusted mode persists across normal Wikipedia navigation", async ({ conte
   await page.goto("https://en.wikipedia.org/wiki/Plant");
   await expect(page.locator("#intro")).toContainText("Plants use photosynthesis");
   await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Level 3");
+});
+
+test("preserves Wikipedia links and citations across adjusted and original modes", async ({ context, extensionId }) => {
+  await configureExtension(context, extensionId, { apiKey: TEST_KEY, level: 2 });
+
+  const page = await openWikipedia(context, "Photosynthesis");
+  const intro = page.locator("#intro");
+  const second = page.locator("#second");
+  const plantLink = intro.locator('a[href="/wiki/Plant"]');
+  const citation = second.locator('sup.reference a[href="#cite_note-1"]');
+  const indicator = page.locator("#plainly-indicator");
+
+  await expect(intro).toHaveText("Plants use photosynthesis to turn light into energy they can use.");
+  await expect(plantLink).toHaveText("Plants");
+  await expect(plantLink).toHaveAttribute("title", "Plant");
+  await expect(second).toContainText("Most photosynthesis also releases oxygen as a waste product.");
+  await expect(citation).toHaveText("[1]");
+
+  await indicator.click();
+  await expect(indicator).toHaveText("Plainly · Original");
+  await expect(intro).toContainText("Photosynthesis is a system of biological processes");
+  await expect(plantLink).toHaveText("plants");
+  await expect(citation).toHaveText("[1]");
+
+  await indicator.click();
+  await expect(indicator).toHaveText("Plainly · Level 2");
+  await expect(intro).toHaveText("Plants use photosynthesis to turn light into energy they can use.");
+  await expect(plantLink).toHaveText("Plants");
+  await expect(citation).toHaveText("[1]");
+});
+
+test("fails open with the original linked prose if adjustment drops a protected link term", async ({ context, extensionId }) => {
+  await configureExtension(context, extensionId, { apiKey: DROP_LINK_TEST_KEY, level: 2 });
+
+  const page = await openWikipedia(context, "Photosynthesis");
+  const intro = page.locator("#intro");
+  const plantLink = intro.locator('a[href="/wiki/Plant"]');
+
+  await expect(intro).toContainText("Photosynthesis is a system of biological processes");
+  await expect(intro).toBeVisible();
+  await expect(plantLink).toHaveText("plants");
+  await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Couldn’t adjust");
 });
 
 test("restores original prose if OpenAI fails instead of leaving the page blocked", async ({ context, extensionId }) => {
