@@ -23,10 +23,13 @@ export async function simplifyWithOpenAI({ apiKey, payload }) {
   if (apiKey.includes("slow")) {
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+  if (payload.blocks.some((block) => block.id.startsWith("block-"))) {
+    throw new Error("Expected stable KMP block keys, not legacy DOM indexes");
+  }
 
   return payload.blocks.map((block) => ({
     id: block.id,
-    text: block.id === "block-0"
+    text: block.text.startsWith("Photosynthesis is")
       ? "Plants use photosynthesis to turn light into energy they can use."
       : "Most photosynthesis also releases oxygen as a waste product.",
   }));
@@ -76,6 +79,7 @@ test("never exposes original prose while the first adjusted paragraph is pending
   await expect(intro).toHaveText("Plants use photosynthesis to turn light into energy they can use.", { timeout: 5_000 });
   await expect(intro).toBeVisible();
   await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Level 2");
+  await expect(page.locator("#plainly-indicator")).toHaveAttribute("data-engine", "kmp");
 });
 
 test("does not hide Wikipedia when no API key has been configured", async ({ context }) => {

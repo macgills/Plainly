@@ -1,15 +1,18 @@
 {
   "name": "plainly",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "npm run test:openai && npm run test:integration",
+    "test": "npm run test:openai && npm run test:safari-manifest && npm run test:integration",
     "test:openai": "node --test tests/openai.integration.test.mjs",
+    "test:safari-manifest": "node --test tests/safari-manifest.test.mjs",
     "test:integration": "playwright test",
+    "build:safari-extension": "node tools/safari-manifest.mjs extension build/safari-extension",
     "demo": "playwright test --config=playwright.demo.config.mjs",
     "test:live:api": "node --test tests/openai.live.test.mjs",
-    "test:live": "playwright test --config=playwright.live.config.mjs"
+    "test:live": "playwright test --config=playwright.live.config.mjs",
+    "eval:live": "node evaluation/run-live.mjs"
   },
   "engines": {
     "node": ">=20"

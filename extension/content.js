@@ -26,14 +26,52 @@
       return;
     }
 
-    document.documentElement.classList.add("plainly-enabled");
-    await waitForArticle();
-
-    const blocks = collectBlocks();
-    if (blocks.length === 0) {
+    const kmp = globalThis["plainly-extension-core"];
+    if (!kmp?.PlainlyCoreJs) {
+      console.warn("Plainly KMP core is unavailable; showing the original article.");
       leaveAdjustedMode();
       return;
     }
+
+    document.documentElement.classList.add("plainly-enabled");
+    await waitForArticle();
+
+    const elements = collectReadableElements();
+    if (elements.length === 0) {
+      leaveAdjustedMode();
+      return;
+    }
+
+    const title = document.querySelector("#firstHeading")?.textContent?.trim() ?? document.title;
+    let session;
+    try {
+      session = kmp.PlainlyCoreJs.createSession(
+        location.href,
+        title,
+        settings.level,
+        elements.map((element) => element.textContent ?? ""),
+        1,
+        4,
+      );
+    } catch (error) {
+      console.warn("Plainly could not initialize its KMP core; showing the original article.", error);
+      leaveAdjustedMode();
+      return;
+    }
+
+    const sourceBlocks = [...session.sourceBlocks()];
+    if (sourceBlocks.length !== elements.length) {
+      console.warn("Plainly core returned a different block count; showing the original article.");
+      leaveAdjustedMode();
+      return;
+    }
+
+    const blocks = sourceBlocks.map((source, index) => ({
+      key: source.key,
+      text: source.text,
+      element: elements[index],
+    }));
+    const blocksByKey = new Map(blocks.map((block) => [block.key, block]));
 
     for (const block of blocks) {
       block.element.dataset.plainlyState = "loading";
@@ -42,17 +80,59 @@
 
     document.documentElement.classList.remove("plainly-pending");
     const indicator = addIndicator(settings.level);
+    indicator.dataset.engine = "kmp";
 
-    const [first, ...rest] = blocks;
-    const firstAdjusted = await transformBatch([first], settings.level);
-    if (!firstAdjusted) {
-      for (const block of rest) block.element.dataset.plainlyState = "error";
-      markIndicatorUnavailable(indicator);
-      return;
-    }
+    let firstBatch = true;
+    while (!session.isComplete()) {
+      const requested = [...session.nextBatch()];
+      if (requested.length === 0) break;
 
-    for (let index = 0; index < rest.length; index += 4) {
-      await transformBatch(rest.slice(index, index + 4), settings.level);
+      const domBatch = requested
+        .map((source) => blocksByKey.get(source.key))
+        .filter(Boolean);
+
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "PLAINLY_SIMPLIFY",
+          payload: {
+            level: settings.level,
+            url: location.href,
+            title,
+            blocks: requested.map(({ key, text }) => ({ id: key, text })),
+          },
+        });
+
+        if (!response?.ok) throw new Error(response?.error ?? "Plainly request failed");
+
+        const decisions = [...session.accept(
+          response.blocks.map((block) => block.id),
+          response.blocks.map((block) => block.text),
+        )];
+        const allReady = applyDecisions(decisions, blocksByKey);
+
+        if (firstBatch && !allReady) {
+          revealUnfinishedBlocks(blocks);
+          markIndicatorUnavailable(indicator);
+          return;
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        try {
+          session.fail(reason);
+        } catch {
+          // The core may already have reconciled the active batch. The DOM still fails open below.
+        }
+        console.warn("Plainly could not adjust a block; restoring original text.", error);
+        for (const block of domBatch) block.element.dataset.plainlyState = "error";
+
+        if (firstBatch) {
+          revealUnfinishedBlocks(blocks);
+          markIndicatorUnavailable(indicator);
+          return;
+        }
+      }
+
+      firstBatch = false;
     }
   }
 
@@ -75,54 +155,39 @@
     });
   }
 
-  function collectBlocks() {
-    return [...document.querySelectorAll(BLOCK_SELECTOR)]
-      .filter(isReadableBlock)
-      .map((element, index) => ({
-        id: `block-${index}`,
-        element,
-        text: normalizeText(element.textContent ?? ""),
-      }));
+  function collectReadableElements() {
+    return [...document.querySelectorAll(BLOCK_SELECTOR)].filter((element) => {
+      if (element.closest(EXCLUDED_ANCESTORS)) return false;
+      return (element.textContent ?? "").replace(/\s+/g, " ").trim().length >= 40;
+    });
   }
 
-  function isReadableBlock(element) {
-    if (element.closest(EXCLUDED_ANCESTORS)) return false;
-    const text = normalizeText(element.textContent ?? "");
-    return text.length >= 40;
-  }
-
-  function normalizeText(text) {
-    return text.replace(/\s+/g, " ").trim();
-  }
-
-  async function transformBatch(blocks, level) {
-    if (blocks.length === 0) return true;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: "PLAINLY_SIMPLIFY",
-        payload: {
-          level,
-          url: location.href,
-          title: document.querySelector("#firstHeading")?.textContent?.trim() ?? document.title,
-          blocks: blocks.map(({ id, text }) => ({ id, text })),
-        },
-      });
-
-      if (!response?.ok) throw new Error(response?.error ?? "Plainly request failed");
-
-      const byId = new Map(response.blocks.map((block) => [block.id, block.text]));
-      for (const block of blocks) {
-        const adjusted = byId.get(block.id);
-        if (!adjusted) throw new Error(`Missing adjusted text for ${block.id}`);
-        block.element.textContent = adjusted;
-        block.element.dataset.plainlyState = "ready";
+  function applyDecisions(decisions, blocksByKey) {
+    let allReady = true;
+    for (const decision of decisions) {
+      const block = blocksByKey.get(decision.key);
+      if (!block) {
+        allReady = false;
+        continue;
       }
-      return true;
-    } catch (error) {
-      console.warn("Plainly could not adjust a block; restoring original text.", error);
-      for (const block of blocks) block.element.dataset.plainlyState = "error";
-      return false;
+
+      if (decision.state === "ready" && decision.text) {
+        block.element.textContent = decision.text;
+        block.element.dataset.plainlyState = "ready";
+      } else {
+        allReady = false;
+        block.element.dataset.plainlyState = "error";
+        if (decision.reason) console.warn(`Plainly rejected ${decision.key}: ${decision.reason}`);
+      }
+    }
+    return allReady;
+  }
+
+  function revealUnfinishedBlocks(blocks) {
+    for (const block of blocks) {
+      if (block.element.dataset.plainlyState === "loading") {
+        block.element.dataset.plainlyState = "error";
+      }
     }
   }
 
