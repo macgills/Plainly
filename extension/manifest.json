@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "Plainly",
+  "version": "0.2.0",
+  "description": "Browse Wikipedia at an adjusted reading level.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://en.wikipedia.org/*",
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Plainly",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://en.wikipedia.org/wiki/*"],
+      "css": ["content.css"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

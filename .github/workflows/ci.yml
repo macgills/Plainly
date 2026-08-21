@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Build deterministic Plainly preview
+        run: npm run demo
+      - name: Publish prototype preview
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-prototype-preview-${{ github.run_number }}
+          path: |
+            artifacts-preview/
+            extension/
+          if-no-files-found: error
+          retention-days: 30
+
+  live-openai:
+    name: Live OpenAI (non-blocking)
+    continue-on-error: true
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      AI_SECRET: ${{ secrets.AI_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - name: Verify live OpenAI secret
+        shell: bash
+        run: |
+          if [ -z "$AI_SECRET" ]; then
+            echo "::error::AI_SECRET repository secret is required for the live integration test"
+            exit 1
+          fi
+      - name: Probe live Responses API through production adapter
+        run: npm run test:live:api
+      - run: npx playwright install --with-deps chromium
+      - name: Run live Plainly browser integration test
+        run: npm run test:live
+      - name: Publish shareable live Plainly demo
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-live-demo-${{ github.run_number }}
+          path: |
+            artifacts/
+            extension/
+          if-no-files-found: error
+          retention-days: 30
