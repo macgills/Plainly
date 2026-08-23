@@ -1,6 +1,6 @@
 {
   "name": "plainly",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,10 +11,6 @@
     "test:live:api": "node --test tests/openai.live.test.mjs",
     "test:live": "playwright test --config=playwright.live.config.mjs"
   },
-  "engines": {
-    "node": ">=20"
-  },
-  "devDependencies": {
-    "@playwright/test": "1.55.0"
-  }
+  "engines": { "node": ">=20" },
+  "devDependencies": { "@playwright/test": "1.55.0" }
 }
