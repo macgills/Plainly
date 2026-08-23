@@ -46,7 +46,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             find("Plainly · Original", in: safari).waitForExistence(timeout: 5),
             "Plainly indicator could not restore the source text",
         )
-        find("Plainly · Original", in: safari).tap()
+        XCTAssertTrue(tap("Plainly · Original", in: safari, timeout: 5))
         XCTAssertTrue(adjustedIndicator.waitForExistence(timeout: 5))
 
         keep(XCUIScreen.main.screenshot(), name: "plainly-adjusted-wikipedia")
@@ -84,9 +84,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
 
     private func grantWebsiteAccessIfPresent() {
         for site in ["All Websites", "en.wikipedia.org", "Wikipedia"] {
-            let row = find(site, in: settings)
-            guard row.exists || row.waitForExistence(timeout: 1) else { continue }
-            row.tap()
+            guard tap(site, in: settings, timeout: 1) else { continue }
             if tap("Allow", in: settings, timeout: 2) || tap("Always Allow", in: settings, timeout: 2) {
                 return
             }
@@ -130,16 +128,8 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     }
 
     private func allowWebsiteAccessIfPrompted() {
-        let preferred = [
-            "Always Allow on This Website",
-            "Always Allow",
-            "Allow for One Day",
-            "Allow",
-        ]
-        for label in preferred {
-            let element = find(label, in: safari)
-            if element.waitForExistence(timeout: 2) {
-                element.tap()
+        for label in ["Always Allow on This Website", "Always Allow", "Allow for One Day", "Allow"] {
+            if tap(label, in: safari, timeout: 2) {
                 return
             }
         }
@@ -147,21 +137,37 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
 
     private func scrollAndTap(_ label: String, in app: XCUIApplication) -> Bool {
         for _ in 0..<8 {
-            let element = find(label, in: app)
-            if element.exists, element.isHittable {
-                element.tap()
+            if tap(label, in: app, timeout: 0.5) {
                 return true
             }
             app.swipeUp()
         }
-        return tap(label, in: app, timeout: 1)
+        return false
     }
 
     private func tap(_ label: String, in app: XCUIApplication, timeout: TimeInterval) -> Bool {
-        let element = find(label, in: app)
-        guard element.waitForExistence(timeout: timeout), element.isHittable else { return false }
-        element.tap()
-        return true
+        let exact = NSPredicate(format: "label == %@ OR identifier == %@", label, label)
+        let containingRow = NSPredicate(format: "label CONTAINS[c] %@ OR identifier == %@", label, label)
+        let candidates = [
+            app.buttons.matching(exact).firstMatch,
+            app.cells.matching(exact).firstMatch,
+            app.cells.matching(containingRow).firstMatch,
+            app.links.matching(exact).firstMatch,
+            app.staticTexts.matching(exact).firstMatch,
+        ]
+        let deadline = Date().addingTimeInterval(timeout)
+
+        repeat {
+            for element in candidates where element.exists {
+                let frame = element.frame
+                guard !frame.isNull, !frame.isEmpty, frame.width > 0, frame.height > 0 else { continue }
+                element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+                return true
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        } while Date() < deadline
+
+        return false
     }
 
     private func find(_ label: String, in app: XCUIApplication) -> XCUIElement {
