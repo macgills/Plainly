@@ -229,7 +229,14 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
 
     private func hasFrame(_ element: XCUIElement) -> Bool {
         let frame = element.frame
-        return !frame.isNull && !frame.isEmpty && frame.width > 0 && frame.height > 0
+        return !frame.isNull &&
+            !frame.isEmpty &&
+            frame.minX.isFinite &&
+            frame.minY.isFinite &&
+            frame.maxX.isFinite &&
+            frame.maxY.isFinite &&
+            frame.width > 0 &&
+            frame.height > 0
     }
 
     private func tapCenter(_ element: XCUIElement) {
