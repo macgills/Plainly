@@ -18,10 +18,23 @@
         <select id="scheme">
           <option value="oxford">Oxford Reading Tree</option>
           <option value="fountasPinnell">Fountas &amp; Pinnell</option>
-          <option value="dibels8">DIBELS 8th Edition</option>
+          <option value="dibelsMaze">DIBELS 8 — Maze</option>
         </select>
-        <label class="select-label" for="level">Level</label>
+        <label class="select-label" for="level" id="level-label">Level</label>
         <select id="level"></select>
+
+        <div id="dibels-fields" hidden>
+          <label class="select-label" for="dibels-period">Assessment period</label>
+          <select id="dibels-period">
+            <option value="beginning">Beginning of year</option>
+            <option value="middle">Middle of year</option>
+            <option value="end">End of year</option>
+          </select>
+          <label class="select-label" for="dibels-score">Maze score</label>
+          <input id="dibels-score" type="number" min="0" step="0.5" inputmode="decimal" placeholder="e.g. 18.5" />
+          <div id="dibels-recommendation" class="hint" role="status"></div>
+        </div>
+
         <p id="scheme-note" class="hint"></p>
       </section>
 
