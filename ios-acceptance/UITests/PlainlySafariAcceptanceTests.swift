@@ -149,11 +149,12 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         }
 
         // Query the accessibility tree without assuming whether Safari exposes the field
-        // as a text field or secure text field on a particular iPadOS release.
+        // as a text field or secure text field on a particular iPadOS release. Type through
+        // Safari after focusing it so XCUI does not dispatch through a stale field snapshot.
         let field = find("OpenAI API key", in: safari)
         XCTAssertTrue(field.waitForExistence(timeout: 10), "Plainly popup did not expose the API-key field")
-        field.tap()
-        field.typeText(apiKey)
+        tapCenter(field)
+        safari.typeText(apiKey)
         XCTAssertTrue(tap("Save", in: safari, timeout: 5), "Plainly Save button was unavailable")
         XCTAssertTrue(
             find("API key saved on this device.", in: safari).waitForExistence(timeout: 10),
