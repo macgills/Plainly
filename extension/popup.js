@@ -11,6 +11,7 @@ const dibelsScore = document.querySelector("#dibels-score");
 const dibelsRecommendation = document.querySelector("#dibels-recommendation");
 const targetNote = document.querySelector("#target-note");
 const kmp = globalThis["plainly-extension-core"]?.PlainlyCoreJs;
+const OPENAI_PERMISSION = Object.freeze({ origins: ["https://api.openai.com/*"] });
 
 if (!kmp) {
   setStatus("Plainly KMP core is unavailable.", true);
@@ -88,10 +89,22 @@ async function updateSettings(settings) {
 }
 
 async function saveApiKey() {
+  // Safari 18.4+ enforces its per-site permission model for cross-origin fetches from
+  // extension pages. A declared host permission is necessary but not sufficient: the
+  // extension must request the origin before fetch can use it. Start this directly from
+  // the Save gesture so Safari can prompt when required. Chromium already reports the
+  // required host permission as granted, so this remains a no-op there.
+  const access = requestOpenAIAccess();
   await ready;
   const value = apiKey.value.trim();
   saveKey.disabled = true;
   setStatus("Saving…");
+
+  if (!await access) {
+    saveKey.disabled = false;
+    setStatus("Allow Plainly to access api.openai.com so it can adjust text.", true);
+    return;
+  }
 
   const response = await send({ type: "PLAINLY_SAVE_API_KEY", apiKey: value });
   saveKey.disabled = false;
@@ -104,6 +117,18 @@ async function saveApiKey() {
   apiKey.value = "";
   renderKeyState(true);
   setStatus("API key saved on this device.");
+}
+
+async function requestOpenAIAccess() {
+  if (!chrome.permissions?.contains || !chrome.permissions?.request) return true;
+
+  try {
+    if (await chrome.permissions.contains(OPENAI_PERMISSION)) return true;
+    return await chrome.permissions.request(OPENAI_PERMISSION);
+  } catch (error) {
+    console.warn("Plainly could not request OpenAI host access.", error);
+    return false;
+  }
 }
 
 async function removeApiKey() {
