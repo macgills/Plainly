@@ -27,6 +27,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.0"
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
       - name: Test KMP core and build browser bundle
         run: gradle -p core --no-daemon jvmTest jsNodeTest compileCommonMainKotlinMetadata jsBrowserProductionWebpack
       - name: Publish KMP browser bundle for extension jobs
@@ -38,12 +39,54 @@ jobs:
           retention-days: 1
 
   safari-ios:
-    name: Safari iPad package
+    name: Safari iPad package + acceptance
     needs: core
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+
+      - name: Start iPad simulator boot
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIMULATOR_UDID="$(python3 - <<'PY'
+          import json
+          import subprocess
+
+          devices = json.loads(subprocess.check_output(
+              ['xcrun', 'simctl', 'list', 'devices', 'available', '-j'],
+              text=True,
+          ))['devices']
+          for runtime, candidates in reversed(list(devices.items())):
+              if 'iOS' not in runtime:
+                  continue
+              for device in candidates:
+                  if 'iPad' in device['name']:
+                      print(device['udid'])
+                      raise SystemExit(0)
+
+          device_types = json.loads(subprocess.check_output(
+              ['xcrun', 'simctl', 'list', 'devicetypes', '-j'],
+              text=True,
+          ))['devicetypes']
+          device_type = next(item for item in reversed(device_types) if 'iPad' in item['name'])
+          runtimes = json.loads(subprocess.check_output(
+              ['xcrun', 'simctl', 'list', 'runtimes', 'available', '-j'],
+              text=True,
+          ))['runtimes']
+          runtime = next(item for item in reversed(runtimes) if 'iOS' in item['identifier'])
+          print(subprocess.check_output(
+              ['xcrun', 'simctl', 'create', 'Plainly Safari Acceptance', device_type['identifier'], runtime['identifier']],
+              text=True,
+          ).strip())
+          PY
+          )"
+          echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
+          echo "iPad simulator: $SIMULATOR_UDID"
+          xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
+
       - uses: actions/download-artifact@v4
         with:
           name: plainly-kmp-browser
@@ -60,9 +103,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "9.5.0"
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+      - name: Cache Kotlin/Native toolchain
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-kotlin-2.4.10
       - name: Link KMP iOS simulator framework
         run: gradle -p core --no-daemon linkDebugFrameworkIosSimulatorArm64
-      - name: Package, build, install and launch Safari Web Extension host on iPad simulator
+      - name: Package and build Safari Web Extension host
         shell: bash
         run: |
           set -euo pipefail
@@ -151,6 +201,8 @@ jobs:
             -derivedDataPath "$PWD/safari-derived" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
+            ONLY_ACTIVE_ARCH=YES \
+            ARCHS=arm64 \
             build 2>&1 | tee artifacts-safari/xcodebuild.log
 
           APP="$(find safari-derived/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -print -quit)"
@@ -182,53 +234,6 @@ jobs:
             exit 1
           fi
 
-          SIMULATOR_UDID="$(python3 - <<'PY'
-          import json
-          import subprocess
-
-          devices = json.loads(subprocess.check_output(
-              ['xcrun', 'simctl', 'list', 'devices', 'available', '-j'],
-              text=True,
-          ))['devices']
-          for runtime, candidates in devices.items():
-              if 'iOS' not in runtime:
-                  continue
-              for device in candidates:
-                  if 'iPad' in device['name']:
-                      print(device['udid'])
-                      raise SystemExit(0)
-
-          device_types = json.loads(subprocess.check_output(
-              ['xcrun', 'simctl', 'list', 'devicetypes', '-j'],
-              text=True,
-          ))['devicetypes']
-          device_type = next(item for item in device_types if 'iPad' in item['name'])
-          runtimes = json.loads(subprocess.check_output(
-              ['xcrun', 'simctl', 'list', 'runtimes', 'available', '-j'],
-              text=True,
-          ))['runtimes']
-          runtime = next(item for item in reversed(runtimes) if 'iOS' in item['identifier'])
-          print(subprocess.check_output(
-              ['xcrun', 'simctl', 'create', 'Plainly CI iPad', device_type['identifier'], runtime['identifier']],
-              text=True,
-          ).strip())
-          PY
-          )"
-
-          echo "iPad simulator: $SIMULATOR_UDID" | tee artifacts-safari/simulator.txt
-          xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
-          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
-          xcrun simctl install "$SIMULATOR_UDID" "$APP"
-          INSTALLED_APP="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" app)"
-          if [ -z "$INSTALLED_APP" ]; then
-            echo "::error::Plainly host app was not installed on the iPad simulator"
-            exit 1
-          fi
-          echo "Installed app container: $INSTALLED_APP" | tee artifacts-safari/simctl-install.txt
-          xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" | tee artifacts-safari/simctl-launch.txt
-          xcrun simctl listapps "$SIMULATOR_UDID" > artifacts-safari/simctl-listapps.txt
-          xcrun simctl shutdown "$SIMULATOR_UDID" || true
-
           cp -R "$APP" artifacts-safari/
           cp -R "$FRAMEWORK" artifacts-safari/
           cp -R "$PROJECT" artifacts-safari/
@@ -245,11 +250,38 @@ jobs:
           Embedded extension: $APPEX
           Extension bundle identifier: $APPEX_BUNDLE_ID
           KMP framework: $FRAMEWORK
-          iPad simulator: $SIMULATOR_UDID
-          Installed app container: $INSTALLED_APP
-          Host app launch: passed
+          Simulator architecture: arm64
           Safari uses a classic MV3 background service worker; Chrome remains a module service worker.
           EOF
+
+      - name: Install Plainly on warm iPad simulator
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
+          APP="$(find safari-derived/Build/Products/Debug-iphonesimulator -maxdepth 1 -name '*.app' -print -quit)"
+          APP_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
+          xcrun simctl install "$SIMULATOR_UDID" "$APP"
+          INSTALLED_APP="$(xcrun simctl get_app_container "$SIMULATOR_UDID" "$APP_BUNDLE_ID" app)"
+          test -n "$INSTALLED_APP"
+          echo "Installed app container: $INSTALLED_APP" | tee artifacts-safari/simctl-install.txt
+          xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID" | tee artifacts-safari/simctl-launch.txt
+          xcrun simctl listapps "$SIMULATOR_UDID" > artifacts-safari/simctl-listapps.txt
+
+      - name: Exercise Plainly inside normal iPad Safari
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          AI_SECRET: ${{ secrets.AI_SECRET }}
+        run: bash tools/run-safari-acceptance.sh
+
+      - name: Capture simulator screenshot
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts-safari/ipad-safari-final.png || true
+      - name: Shut down simulator
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        run: xcrun simctl shutdown "$SIMULATOR_UDID" || true
+
       - name: Collect Safari diagnostics
         if: always()
         shell: bash
@@ -265,7 +297,7 @@ jobs:
           if [ -d safari-generated ] && [ ! -e artifacts-safari/safari-generated ]; then
             cp -R safari-generated artifacts-safari/safari-generated
           fi
-      - name: Publish Safari/iPad build proof and diagnostics
+      - name: Publish Safari/iPad build proof and acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -350,87 +382,4 @@ jobs:
           name: plainly-teacher-review-${{ github.run_number }}
           path: evaluation-artifacts/
           if-no-files-found: error
-          retention-days: 30
-
-  ipad-safari-acceptance:
-    name: iPad Safari acceptance
-    needs: safari-ios
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: macos-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-      - name: Download packaged Safari/iPad app
-        uses: actions/download-artifact@v4
-        with:
-          name: plainly-safari-ios-${{ github.run_number }}
-          path: artifacts-safari
-      - name: Install Plainly on a fresh iPad simulator
-        shell: bash
-        run: |
-          set -euo pipefail
-          SIMULATOR_UDID="$(python3 - <<'PY'
-          import json
-          import subprocess
-
-          devices = json.loads(subprocess.check_output(
-              ['xcrun', 'simctl', 'list', 'devices', 'available', '-j'],
-              text=True,
-          ))['devices']
-          for runtime, candidates in reversed(list(devices.items())):
-              if 'iOS' not in runtime:
-                  continue
-              for device in candidates:
-                  if 'iPad' in device['name']:
-                      print(device['udid'])
-                      raise SystemExit(0)
-
-          device_types = json.loads(subprocess.check_output(
-              ['xcrun', 'simctl', 'list', 'devicetypes', '-j'],
-              text=True,
-          ))['devicetypes']
-          device_type = next(item for item in reversed(device_types) if 'iPad' in item['name'])
-          runtimes = json.loads(subprocess.check_output(
-              ['xcrun', 'simctl', 'list', 'runtimes', 'available', '-j'],
-              text=True,
-          ))['runtimes']
-          runtime = next(item for item in reversed(runtimes) if 'iOS' in item['identifier'])
-          print(subprocess.check_output(
-              ['xcrun', 'simctl', 'create', 'Plainly Safari Acceptance', device_type['identifier'], runtime['identifier']],
-              text=True,
-          ).strip())
-          PY
-          )"
-          echo "SIMULATOR_UDID=$SIMULATOR_UDID" >> "$GITHUB_ENV"
-          xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
-          xcrun simctl bootstatus "$SIMULATOR_UDID" -b
-
-          APP="$(find artifacts-safari -name '*.app' -type d -print -quit)"
-          if [ -z "$APP" ]; then
-            echo "::error::Safari CI artifact did not contain an iPad simulator app"
-            exit 1
-          fi
-          APP_BUNDLE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist")"
-          xcrun simctl install "$SIMULATOR_UDID" "$APP"
-          xcrun simctl launch "$SIMULATOR_UDID" "$APP_BUNDLE_ID"
-      - name: Exercise Plainly inside normal iPad Safari
-        env:
-          AI_SECRET: ${{ secrets.AI_SECRET }}
-        run: bash tools/run-safari-acceptance.sh
-      - name: Capture simulator screenshot
-        if: always()
-        run: xcrun simctl io "$SIMULATOR_UDID" screenshot artifacts-safari/ipad-safari-final.png || true
-      - name: Shut down simulator
-        if: always()
-        run: xcrun simctl shutdown "$SIMULATOR_UDID" || true
-      - name: Publish Safari acceptance evidence
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: plainly-safari-acceptance-${{ github.run_number }}
-          path: |
-            artifacts-safari/plainly-safari-acceptance.xcresult
-            artifacts-safari/safari-acceptance.log
-            artifacts-safari/ipad-safari-final.png
-          if-no-files-found: warn
           retention-days: 30
