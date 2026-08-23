@@ -1,6 +1,7 @@
 import { simplifyWithOpenAI } from "./openai.js";
+import { DEFAULT_READING_TARGET, isValidReadingTarget } from "./profiles.js";
 
-const DEFAULT_SETTINGS = Object.freeze({ enabled: true, level: 2 });
+const DEFAULT_SETTINGS = Object.freeze({ enabled: true, ...DEFAULT_READING_TARGET });
 
 void restrictSecretStorage();
 chrome.runtime.onInstalled.addListener(() => void restrictSecretStorage());
@@ -39,28 +40,35 @@ async function handleMessage(message) {
 }
 
 async function getPublicSettings() {
-  const stored = await chrome.storage.local.get({
-    ...DEFAULT_SETTINGS,
-    openAIApiKey: "",
-  });
+  const stored = await chrome.storage.local.get({ ...DEFAULT_SETTINGS, openAIApiKey: "" });
+  const target = isValidReadingTarget(stored.scheme, stored.level)
+    ? { scheme: stored.scheme, level: String(stored.level) }
+    : DEFAULT_READING_TARGET;
 
   return {
     enabled: stored.enabled,
-    level: stored.level,
+    ...target,
     hasApiKey: typeof stored.openAIApiKey === "string" && stored.openAIApiKey.length >= 20,
   };
 }
 
 async function updateSettings(settings) {
+  const current = await getPublicSettings();
   const update = {};
+
   if (Object.hasOwn(settings ?? {}, "enabled")) {
     if (typeof settings.enabled !== "boolean") throw new Error("enabled must be a boolean");
     update.enabled = settings.enabled;
   }
-  if (Object.hasOwn(settings ?? {}, "level")) {
-    if (![1, 2, 3].includes(settings.level)) throw new Error("level must be 1, 2, or 3");
-    update.level = settings.level;
+
+  if (Object.hasOwn(settings ?? {}, "scheme") || Object.hasOwn(settings ?? {}, "level")) {
+    const scheme = settings.scheme ?? current.scheme;
+    const level = String(settings.level ?? current.level);
+    if (!isValidReadingTarget(scheme, level)) throw new Error("Unsupported Plainly reading target");
+    update.scheme = scheme;
+    update.level = level;
   }
+
   await chrome.storage.local.set(update);
 }
 
