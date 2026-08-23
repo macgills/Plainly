@@ -9,8 +9,9 @@ const sourceExtensionPath = path.resolve(here, "../extension");
 
 const fakeOpenAIAdapter = `
 export async function simplifyWithOpenAI({ payload }) {
-  if (payload.scheme !== "dibels8" || payload.level !== "4") throw new Error("Unexpected DIBELS target");
-  return payload.blocks.map((block) => ({ id: block.id, text: "This is adjusted for the selected DIBELS grade target." }));
+  if (payload.scheme !== "dibelsMaze" || payload.level !== "4") throw new Error("Unexpected Maze target");
+  if (payload.assessment?.period !== "middle" || payload.assessment?.score !== "14") throw new Error("Missing Maze assessment");
+  return payload.blocks.map((block) => ({ id: block.id, text: "This is adjusted using the Maze-derived Plainly target." }));
 }
 `;
 
@@ -30,23 +31,30 @@ const test = base.extend({
   },
 });
 
-test("DIBELS Grade 4 can be selected and persists", async ({ context, extensionId }) => {
+test("DIBELS Maze grade, period and score produce a recommendation and persist", async ({ context, extensionId }) => {
   let popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(popup.getByRole("status")).not.toHaveText("Checking…");
+  await expect(popup.getByRole("status").first()).not.toHaveText("Checking…");
   await popup.getByRole("textbox", { name: "OpenAI API key" }).fill("sk-test-dibels-browser-integration-key");
   await popup.getByRole("button", { name: "Save" }).click();
-  await popup.getByLabel("Reading scheme").selectOption("dibels8");
-  await popup.getByLabel("Level").selectOption("4");
-  await expect(popup.getByText(/assessment system, not a text-leveling scheme/i)).toBeVisible();
+  await popup.getByLabel("Reading scheme").selectOption("dibelsMaze");
+  await popup.getByLabel("Grade").selectOption("4");
+  await popup.getByLabel("Assessment period").selectOption("middle");
+  await popup.getByLabel("Maze score").fill("14");
+  await popup.getByLabel("Maze score").blur();
+  await expect(popup.getByText(/Strategic support/i)).toBeVisible();
+  await expect(popup.getByText(/F&P/i)).toBeVisible();
   await expect.poll(() => popup.evaluate(async () => {
     const response = await chrome.runtime.sendMessage({ type: "PLAINLY_GET_SETTINGS" });
-    return `${response.settings.scheme}:${response.settings.level}`;
-  })).toBe("dibels8:4");
+    return `${response.settings.scheme}:${response.settings.level}:${response.settings.dibelsPeriod}:${response.settings.dibelsMazeScore}`;
+  })).toBe("dibelsMaze:4:middle:14");
   await popup.close();
 
   popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(popup.getByLabel("Reading scheme")).toHaveValue("dibels8");
-  await expect(popup.getByLabel("Level")).toHaveValue("4");
+  await expect(popup.getByLabel("Reading scheme")).toHaveValue("dibelsMaze");
+  await expect(popup.getByLabel("Grade")).toHaveValue("4");
+  await expect(popup.getByLabel("Assessment period")).toHaveValue("middle");
+  await expect(popup.getByLabel("Maze score")).toHaveValue("14");
+  await expect(popup.getByText(/Strategic support/i)).toBeVisible();
 });
