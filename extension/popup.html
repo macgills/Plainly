@@ -19,31 +19,44 @@
       <section class="api-key-section" aria-labelledby="api-key-heading">
         <div class="section-heading" id="api-key-heading">OpenAI API key</div>
         <div class="api-key-row">
-          <input
-            id="api-key"
-            type="password"
-            placeholder="sk-…"
-            autocomplete="off"
-            spellcheck="false"
-            aria-label="OpenAI API key"
-          />
+          <input id="api-key" type="password" placeholder="sk-…" autocomplete="off" spellcheck="false" aria-label="OpenAI API key" />
           <button id="save-key" type="button">Save</button>
         </div>
         <div class="key-state-row">
           <span id="key-status" role="status">Checking…</span>
           <button id="remove-key" class="link-button" type="button" hidden>Remove</button>
         </div>
-        <p class="hint">Stored in this Chrome profile and sent only to OpenAI when Plainly adjusts a page.</p>
+        <p class="hint">Stored in this browser profile and sent only to OpenAI when Plainly adjusts a page.</p>
       </section>
 
-      <fieldset>
-        <legend>Reading level</legend>
-        <label><input type="radio" name="level" value="1" /> Level 1</label>
-        <label><input type="radio" name="level" value="2" /> Level 2</label>
-        <label><input type="radio" name="level" value="3" /> Level 3</label>
-      </fieldset>
+      <section class="reading-target-section" aria-labelledby="reading-target-heading">
+        <div class="section-heading" id="reading-target-heading">Reading target</div>
+        <label class="field-row" for="scheme">
+          <span>Scheme</span>
+          <select id="scheme" aria-label="Reading scheme"></select>
+        </label>
+        <label class="field-row" for="level">
+          <span>Level</span>
+          <select id="level" aria-label="Reading level"></select>
+        </label>
+
+        <div id="dibels-fields" class="dibels-fields" hidden>
+          <label class="field-row" for="dibels-period">
+            <span>Benchmark period</span>
+            <select id="dibels-period" aria-label="DIBELS benchmark period"></select>
+          </label>
+          <label class="field-row" for="dibels-score">
+            <span>Maze score</span>
+            <input id="dibels-score" type="number" min="0" step="0.5" inputmode="decimal" aria-label="DIBELS Maze score" placeholder="Optional" />
+          </label>
+          <div id="dibels-recommendation" class="recommendation" hidden></div>
+        </div>
+        <p id="target-note" class="hint"></p>
+      </section>
+
       <p>Changes apply automatically to the next Wikipedia page you open or reload.</p>
     </main>
+    <script src="generated/plainly-core.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

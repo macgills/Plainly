@@ -3,7 +3,7 @@ export const DEFAULT_MODEL = "gpt-5-mini";
 export const DEFAULT_REASONING_EFFORT = "minimal";
 export const DEFAULT_VERBOSITY = "low";
 
-const LEVEL_GUIDANCE = Object.freeze({
+const LEGACY_LEVEL_GUIDANCE = Object.freeze({
   1: "Use very common words, short sentences, one main idea per sentence, and explain essential subject words in simple language only when the source itself explains them.",
   2: "Use common vocabulary and mostly short sentences. Keep essential subject vocabulary, but explain unfamiliar terms only when the source itself provides that explanation.",
   3: "Use clear secondary-school language. Reduce sentence complexity while preserving important domain terminology and nuance.",
@@ -17,7 +17,7 @@ export async function simplifyWithOpenAI({
   fetchImpl = fetch,
 }) {
   validateApiKey(apiKey);
-  validatePayload(payload);
+  const readingTarget = validatePayload(payload);
 
   const response = await fetchImpl(apiUrl, {
     method: "POST",
@@ -28,20 +28,18 @@ export async function simplifyWithOpenAI({
     body: JSON.stringify({
       model,
       store: false,
-      reasoning: {
-        effort: DEFAULT_REASONING_EFFORT,
-      },
+      reasoning: { effort: DEFAULT_REASONING_EFFORT },
       input: [
         {
           role: "system",
           content: [{
             type: "input_text",
             text: [
-              "You adjust Wikipedia prose to a specified reading level.",
+              "You adjust informational web prose to a specified reading target.",
               "Use only information present in the supplied source text.",
               "Do not add facts, definitions, examples, explanations, causes, or conclusions from your own knowledge.",
               "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
-              "Simplify syntax and vocabulary without removing information needed to understand the source.",
+              "Preserve the source's factual precision and conceptual rigor even when making language easier to process.",
               "Return one adjusted string for every supplied block id.",
             ].join(" "),
           }],
@@ -52,8 +50,7 @@ export async function simplifyWithOpenAI({
             type: "input_text",
             text: JSON.stringify({
               title: payload.title ?? "",
-              level: payload.level,
-              guidance: LEVEL_GUIDANCE[payload.level],
+              readingTarget,
               blocks: payload.blocks,
             }),
           }],
@@ -127,7 +124,7 @@ function validateApiKey(apiKey) {
 }
 
 function validatePayload(payload) {
-  if (![1, 2, 3].includes(payload?.level)) throw new Error("level must be 1, 2, or 3");
+  const readingTarget = normalizeReadingTarget(payload);
   if (!Array.isArray(payload?.blocks) || payload.blocks.length === 0 || payload.blocks.length > 8) {
     throw new Error("blocks must contain between 1 and 8 items");
   }
@@ -138,4 +135,31 @@ function validatePayload(payload) {
     }
     if (block.text.length > 8_000) throw new Error("block text is too long");
   }
+  return readingTarget;
+}
+
+function normalizeReadingTarget(payload) {
+  const target = payload?.readingTarget;
+  if (target) {
+    for (const key of ["schemeId", "scheme", "level", "guidance", "qualification"]) {
+      if (typeof target[key] !== "string" || target[key].trim().length === 0) {
+        throw new Error(`readingTarget.${key} must be a non-empty string`);
+      }
+    }
+    return target;
+  }
+
+  // Temporary compatibility for the existing live teacher-evaluation script while
+  // product/browser targets are resolved exclusively by the KMP core.
+  if ([1, 2, 3].includes(payload?.level)) {
+    return {
+      schemeId: "legacy",
+      scheme: "Plainly legacy level",
+      level: String(payload.level),
+      guidance: LEGACY_LEVEL_GUIDANCE[payload.level],
+      qualification: "Legacy evaluation target; browser product settings use KMP reading targets.",
+      recommendation: null,
+    };
+  }
+  throw new Error("readingTarget is required");
 }

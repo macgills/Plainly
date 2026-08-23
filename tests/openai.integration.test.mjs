@@ -9,8 +9,16 @@ import {
 } from "../extension/openai.js";
 
 const TEST_KEY = "sk-test-plainly-integration-key";
+const READING_TARGET = Object.freeze({
+  schemeId: "oxford",
+  scheme: "Oxford Reading Tree",
+  level: "8",
+  guidance: "Use mostly short-to-medium sentences and clear paragraph structure.",
+  qualification: "Approximate language target, not an official webpage level.",
+  recommendation: null,
+});
 
-test("calls the OpenAI Responses API with the user key and maps structured blocks", async () => {
+test("calls the OpenAI Responses API with a KMP-resolved reading target", async () => {
   let receivedAuthorization;
   let receivedBody;
 
@@ -45,7 +53,7 @@ test("calls the OpenAI Responses API with the user key and maps structured block
       model: "gpt-5-mini",
       payload: {
         title: "Photosynthesis",
-        level: 2,
+        readingTarget: READING_TARGET,
         blocks: [{
           id: "stable-key-0",
           text: "Photosynthesis is a system of biological processes by which phototrophic organisms convert light energy into chemical energy.",
@@ -60,7 +68,12 @@ test("calls the OpenAI Responses API with the user key and maps structured block
     assert.equal(receivedBody.text.verbosity, DEFAULT_VERBOSITY);
     assert.equal(receivedBody.text.format.type, "json_schema");
     assert.match(receivedBody.input[0].content[0].text, /Do not add facts, definitions/);
-    assert.match(receivedBody.input[1].content[0].text, /Photosynthesis/);
+
+    const userInput = JSON.parse(receivedBody.input[1].content[0].text);
+    assert.equal(userInput.title, "Photosynthesis");
+    assert.equal(userInput.readingTarget.schemeId, "oxford");
+    assert.equal(userInput.readingTarget.level, "8");
+    assert.match(userInput.readingTarget.guidance, /short-to-medium/);
     assert.deepEqual(result, [{ id: "stable-key-0", text: "Plants turn light into usable energy." }]);
   } finally {
     await new Promise((resolve) => server.close(resolve));

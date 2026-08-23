@@ -33,6 +33,20 @@
       return;
     }
 
+    let target;
+    try {
+      target = kmp.PlainlyCoreJs.resolveReadingTarget(
+        settings.scheme,
+        settings.level,
+        settings.dibelsPeriod ?? "",
+        settings.dibelsMazeScore ?? "",
+      );
+    } catch (error) {
+      console.warn("Plainly reading target is invalid; showing the original article.", error);
+      leaveAdjustedMode();
+      return;
+    }
+
     document.documentElement.classList.add("plainly-enabled");
     await waitForArticle();
 
@@ -48,7 +62,10 @@
       session = kmp.PlainlyCoreJs.createSession(
         location.href,
         title,
+        settings.scheme,
         settings.level,
+        settings.dibelsPeriod ?? "",
+        settings.dibelsMazeScore ?? "",
         elements.map((element) => element.textContent ?? ""),
         1,
         4,
@@ -79,7 +96,7 @@
     }
 
     document.documentElement.classList.remove("plainly-pending");
-    const indicator = addIndicator(settings.level);
+    const indicator = addIndicator(target.label);
     indicator.dataset.engine = "kmp";
 
     let firstBatch = true;
@@ -95,9 +112,9 @@
         const response = await chrome.runtime.sendMessage({
           type: "PLAINLY_SIMPLIFY",
           payload: {
-            level: settings.level,
             url: location.href,
             title,
+            readingTarget: toPromptTarget(target),
             blocks: requested.map(({ key, text }) => ({ id: key, text })),
           },
         });
@@ -134,6 +151,29 @@
 
       firstBatch = false;
     }
+  }
+
+  function toPromptTarget(target) {
+    const recommendation = target.recommendation;
+    return {
+      schemeId: target.schemeId,
+      scheme: target.schemeName,
+      level: target.level,
+      guidance: target.guidance,
+      qualification: target.disclaimer,
+      recommendation: recommendation ? {
+        band: recommendation.band,
+        benchmarkLabel: recommendation.benchmarkLabel,
+        support: recommendation.support,
+        assessedGrade: recommendation.assessedGrade,
+        accessGrade: recommendation.accessGrade,
+        approximateCrosswalk: {
+          lexile: recommendation.lexile,
+          fountasPinnell: recommendation.fountasPinnell,
+          oxford: recommendation.oxford,
+        },
+      } : null,
+    };
   }
 
   function leaveAdjustedMode() {
@@ -191,14 +231,14 @@
     }
   }
 
-  function addIndicator(level) {
+  function addIndicator(label) {
     const existing = document.getElementById("plainly-indicator");
     if (existing) return existing;
 
     const indicator = document.createElement("button");
     indicator.id = "plainly-indicator";
     indicator.type = "button";
-    indicator.textContent = `Plainly · Level ${level}`;
+    indicator.textContent = `Plainly · ${label}`;
     indicator.title = "Show original text";
     indicator.addEventListener("click", () => {
       const showingOriginal = indicator.dataset.mode === "original";
@@ -212,7 +252,7 @@
         }
       }
       indicator.dataset.mode = showingOriginal ? "adjusted" : "original";
-      indicator.textContent = showingOriginal ? `Plainly · Level ${level}` : "Plainly · Original";
+      indicator.textContent = showingOriginal ? `Plainly · ${label}` : "Plainly · Original";
       indicator.title = showingOriginal ? "Show original text" : "Show adjusted text";
     });
     document.documentElement.append(indicator);

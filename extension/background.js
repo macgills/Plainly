@@ -1,6 +1,14 @@
 import { simplifyWithOpenAI } from "./openai.js";
 
-const DEFAULT_SETTINGS = Object.freeze({ enabled: true, level: 2 });
+const DEFAULT_SETTINGS = Object.freeze({
+  enabled: true,
+  scheme: "oxford",
+  level: "8",
+  dibelsPeriod: "middle",
+  dibelsMazeScore: "",
+});
+const SCHEMES = new Set(["oxford", "fountasPinnell", "dibelsMaze"]);
+const DIBELS_PERIODS = new Set(["beginning", "middle", "end"]);
 
 void restrictSecretStorage();
 chrome.runtime.onInstalled.addListener(() => void restrictSecretStorage());
@@ -39,14 +47,22 @@ async function handleMessage(message) {
 }
 
 async function getPublicSettings() {
-  const stored = await chrome.storage.local.get({
-    ...DEFAULT_SETTINGS,
-    openAIApiKey: "",
-  });
+  const stored = await chrome.storage.local.get([
+    "enabled",
+    "scheme",
+    "level",
+    "dibelsPeriod",
+    "dibelsMazeScore",
+    "openAIApiKey",
+  ]);
+  const hasReadingTarget = typeof stored.scheme === "string";
 
   return {
-    enabled: stored.enabled,
-    level: stored.level,
+    enabled: typeof stored.enabled === "boolean" ? stored.enabled : DEFAULT_SETTINGS.enabled,
+    scheme: hasReadingTarget ? stored.scheme : DEFAULT_SETTINGS.scheme,
+    level: hasReadingTarget && typeof stored.level === "string" ? stored.level : DEFAULT_SETTINGS.level,
+    dibelsPeriod: typeof stored.dibelsPeriod === "string" ? stored.dibelsPeriod : DEFAULT_SETTINGS.dibelsPeriod,
+    dibelsMazeScore: typeof stored.dibelsMazeScore === "string" ? stored.dibelsMazeScore : DEFAULT_SETTINGS.dibelsMazeScore,
     hasApiKey: typeof stored.openAIApiKey === "string" && stored.openAIApiKey.length >= 20,
   };
 }
@@ -57,9 +73,26 @@ async function updateSettings(settings) {
     if (typeof settings.enabled !== "boolean") throw new Error("enabled must be a boolean");
     update.enabled = settings.enabled;
   }
+  if (Object.hasOwn(settings ?? {}, "scheme")) {
+    if (!SCHEMES.has(settings.scheme)) throw new Error("unsupported reading scheme");
+    update.scheme = settings.scheme;
+  }
   if (Object.hasOwn(settings ?? {}, "level")) {
-    if (![1, 2, 3].includes(settings.level)) throw new Error("level must be 1, 2, or 3");
+    if (typeof settings.level !== "string" || settings.level.length === 0 || settings.level.length > 3) {
+      throw new Error("level must be a short non-empty string");
+    }
     update.level = settings.level;
+  }
+  if (Object.hasOwn(settings ?? {}, "dibelsPeriod")) {
+    if (!DIBELS_PERIODS.has(settings.dibelsPeriod)) throw new Error("unsupported DIBELS benchmark period");
+    update.dibelsPeriod = settings.dibelsPeriod;
+  }
+  if (Object.hasOwn(settings ?? {}, "dibelsMazeScore")) {
+    const score = settings.dibelsMazeScore;
+    if (typeof score !== "string" || (score !== "" && (!Number.isFinite(Number(score)) || Number(score) < 0))) {
+      throw new Error("DIBELS Maze score must be empty or a non-negative number");
+    }
+    update.dibelsMazeScore = score;
   }
   await chrome.storage.local.set(update);
 }
