@@ -1,4 +1,4 @@
-import { getReadingTarget } from "./profiles.js";
+import { getReadingTarget } from "./reading-targets.js";
 
 export const DEFAULT_OPENAI_API_URL = "https://api.openai.com/v1/responses";
 export const DEFAULT_MODEL = "gpt-5-mini";
@@ -15,55 +15,26 @@ export async function simplifyWithOpenAI({ apiKey, payload, apiUrl = DEFAULT_OPE
       model,
       store: false,
       input: [
-        {
-          role: "system",
-          content: [{ type: "input_text", text: [
-            "You adjust informational web prose for a specified reading target.",
-            "Use only information present in the supplied source text.",
-            "Do not add facts, examples, explanations, causes, or conclusions from your own knowledge.",
-            "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
-            "Reduce linguistic barriers without reducing the intellectual content required by the source.",
-            "The named reading scheme is a transformation target, not an official assessment or certification of the webpage or reader.",
-            "Return one adjusted string for every supplied block id.",
-          ].join(" ") }],
-        },
-        {
-          role: "user",
-          content: [{ type: "input_text", text: JSON.stringify({
-            title: payload.title ?? "",
-            readingTarget: {
-              scheme: target.schemeName,
-              level: target.level,
-              guidance: target.guidance,
-              qualification: target.disclaimer,
-            },
-            blocks: payload.blocks,
-          }) }],
-        },
+        { role: "system", content: [{ type: "input_text", text: [
+          "You adjust informational web prose for a specified reading target.",
+          "Use only information present in the supplied source text.",
+          "Do not add facts, examples, explanations, causes, or conclusions from your own knowledge.",
+          "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
+          "Reduce linguistic barriers without reducing the intellectual content required by the source.",
+          "The named reading scheme is a transformation target, not an official assessment or certification of the webpage or reader.",
+          "Return one adjusted string for every supplied block id.",
+        ].join(" ") }] },
+        { role: "user", content: [{ type: "input_text", text: JSON.stringify({
+          title: payload.title ?? "",
+          readingTarget: { scheme: target.schemeName, level: target.level, guidance: target.guidance, qualification: target.disclaimer },
+          blocks: payload.blocks,
+        }) }] },
       ],
-      text: {
-        format: {
-          type: "json_schema",
-          name: "plainly_adjusted_blocks",
-          strict: true,
-          schema: {
-            type: "object",
-            additionalProperties: false,
-            properties: {
-              blocks: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: false,
-                  properties: { id: { type: "string" }, text: { type: "string" } },
-                  required: ["id", "text"],
-                },
-              },
-            },
-            required: ["blocks"],
-          },
-        },
-      },
+      text: { format: { type: "json_schema", name: "plainly_adjusted_blocks", strict: true, schema: {
+        type: "object", additionalProperties: false,
+        properties: { blocks: { type: "array", items: { type: "object", additionalProperties: false, properties: { id: { type: "string" }, text: { type: "string" } }, required: ["id", "text"] } } },
+        required: ["blocks"],
+      } } },
     }),
   });
 
@@ -75,7 +46,6 @@ export async function simplifyWithOpenAI({ apiKey, payload, apiUrl = DEFAULT_OPE
   const data = await response.json();
   const outputText = extractOutputText(data);
   if (!outputText) throw new Error("OpenAI returned no adjusted text");
-
   const parsed = JSON.parse(outputText);
   if (!Array.isArray(parsed.blocks)) throw new Error("OpenAI returned an invalid block response");
   const byId = new Map(parsed.blocks.map((block) => [block?.id, block?.text]));
