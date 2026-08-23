@@ -3,12 +3,6 @@ export const DEFAULT_MODEL = "gpt-5-mini";
 export const DEFAULT_REASONING_EFFORT = "minimal";
 export const DEFAULT_VERBOSITY = "low";
 
-const LEGACY_LEVEL_GUIDANCE = Object.freeze({
-  1: "Use very common words, short sentences, one main idea per sentence, and explain essential subject words in simple language only when the source itself explains them.",
-  2: "Use common vocabulary and mostly short sentences. Keep essential subject vocabulary, but explain unfamiliar terms only when the source itself provides that explanation.",
-  3: "Use clear secondary-school language. Reduce sentence complexity while preserving important domain terminology and nuance.",
-});
-
 export async function simplifyWithOpenAI({
   apiKey,
   payload,
@@ -17,7 +11,7 @@ export async function simplifyWithOpenAI({
   fetchImpl = fetch,
 }) {
   validateApiKey(apiKey);
-  const readingTarget = validatePayload(payload);
+  validatePayload(payload);
 
   const response = await fetchImpl(apiUrl, {
     method: "POST",
@@ -50,7 +44,7 @@ export async function simplifyWithOpenAI({
             type: "input_text",
             text: JSON.stringify({
               title: payload.title ?? "",
-              readingTarget,
+              readingTarget: payload.readingTarget,
               blocks: payload.blocks,
             }),
           }],
@@ -124,42 +118,21 @@ function validateApiKey(apiKey) {
 }
 
 function validatePayload(payload) {
-  const readingTarget = normalizeReadingTarget(payload);
+  const target = payload?.readingTarget;
+  if (!target) throw new Error("readingTarget is required");
+  for (const key of ["schemeId", "scheme", "level", "guidance", "qualification"]) {
+    if (typeof target[key] !== "string" || target[key].trim().length === 0) {
+      throw new Error(`readingTarget.${key} must be a non-empty string`);
+    }
+  }
+
   if (!Array.isArray(payload?.blocks) || payload.blocks.length === 0 || payload.blocks.length > 8) {
     throw new Error("blocks must contain between 1 and 8 items");
   }
-
   for (const block of payload.blocks) {
     if (typeof block?.id !== "string" || typeof block?.text !== "string" || block.text.trim().length === 0) {
       throw new Error("each block must contain a non-empty id and text");
     }
     if (block.text.length > 8_000) throw new Error("block text is too long");
   }
-  return readingTarget;
-}
-
-function normalizeReadingTarget(payload) {
-  const target = payload?.readingTarget;
-  if (target) {
-    for (const key of ["schemeId", "scheme", "level", "guidance", "qualification"]) {
-      if (typeof target[key] !== "string" || target[key].trim().length === 0) {
-        throw new Error(`readingTarget.${key} must be a non-empty string`);
-      }
-    }
-    return target;
-  }
-
-  // Temporary compatibility for the existing live teacher-evaluation script while
-  // product/browser targets are resolved exclusively by the KMP core.
-  if ([1, 2, 3].includes(payload?.level)) {
-    return {
-      schemeId: "legacy",
-      scheme: "Plainly legacy level",
-      level: String(payload.level),
-      guidance: LEGACY_LEVEL_GUIDANCE[payload.level],
-      qualification: "Legacy evaluation target; browser product settings use KMP reading targets.",
-      recommendation: null,
-    };
-  }
-  throw new Error("readingTarget is required");
 }
