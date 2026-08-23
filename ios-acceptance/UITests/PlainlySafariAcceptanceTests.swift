@@ -113,8 +113,18 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
 
     private func grantWebsiteAccess(_ site: String) -> Bool {
         guard scrollAndTapBidirectionally(site, in: settings) else { return false }
-        return tap("Allow", in: settings, timeout: 2)
-            || tap("Always Allow", in: settings, timeout: 2)
+        guard tap("Allow", in: settings, timeout: 2) || tap("Always Allow", in: settings, timeout: 2) else {
+            return false
+        }
+
+        // Selecting a host pushes a detail pane (Ask / Deny / Allow). Return to Plainly's
+        // host list before looking for the next required origin. Run #94 proved the grant
+        // itself succeeds; the previous harness then searched for Wikipedia inside the
+        // api.openai.com detail pane.
+        let back = settings.navigationBars.buttons.firstMatch
+        guard back.waitForExistence(timeout: 2), hasFrame(back) else { return false }
+        tapCenter(back)
+        return true
     }
 
     private func openWikipedia() {
