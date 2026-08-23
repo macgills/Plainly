@@ -128,7 +128,9 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     }
 
     private func openWikipedia() {
-        safari.launch()
+        // Opening Safari by URL avoids its fresh-launch Start Page. In CI the initial
+        // address field can retain keyboard focus long enough for XCUIApplication.launch()
+        // to time out even though Safari is visibly foreground.
         safari.open(wikipedia)
         XCTAssertTrue(
             find("Photosynthesis", in: safari).waitForExistence(timeout: 20),
