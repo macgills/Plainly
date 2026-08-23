@@ -53,10 +53,10 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     }
 
     private func enablePlainlyInSafariSettings() {
+        settings.terminate()
         settings.launch()
-        unwindSettingsNavigation()
 
-        if tap("Apps", in: settings, timeout: 3) {
+        if tap("Apps", in: settings, timeout: 5) {
             XCTAssertTrue(scrollAndTap("Safari", in: settings), "Safari settings were not reachable from Settings > Apps")
         } else {
             let search = settings.searchFields.firstMatch
@@ -88,7 +88,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             guard row.exists || row.waitForExistence(timeout: 1) else { continue }
             row.tap()
             if tap("Allow", in: settings, timeout: 2) || tap("Always Allow", in: settings, timeout: 2) {
-                _ = tapBack(in: settings)
+                return
             }
         }
     }
@@ -145,17 +145,6 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         }
     }
 
-    private func unwindSettingsNavigation() {
-        for _ in 0..<8 where tapBack(in: settings) {}
-    }
-
-    private func tapBack(in app: XCUIApplication) -> Bool {
-        let button = app.navigationBars.buttons.firstMatch
-        guard button.exists, button.isHittable else { return false }
-        button.tap()
-        return true
-    }
-
     private func scrollAndTap(_ label: String, in app: XCUIApplication) -> Bool {
         for _ in 0..<8 {
             let element = find(label, in: app)
@@ -170,7 +159,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
 
     private func tap(_ label: String, in app: XCUIApplication, timeout: TimeInterval) -> Bool {
         let element = find(label, in: app)
-        guard element.waitForExistence(timeout: timeout) else { return false }
+        guard element.waitForExistence(timeout: timeout), element.isHittable else { return false }
         element.tap()
         return true
     }
