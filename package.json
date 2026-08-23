@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "npm run test:openai && npm run test:integration",
-    "test:openai": "node --test tests/openai.integration.test.mjs",
+    "test:openai": "node --test tests/*.integration.test.mjs",
     "test:integration": "playwright test",
     "demo": "playwright test --config=playwright.demo.config.mjs",
     "test:live:api": "node --test tests/openai.live.test.mjs",
