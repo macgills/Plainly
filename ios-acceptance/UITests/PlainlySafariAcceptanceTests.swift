@@ -33,9 +33,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         openWikipedia()
         allowWebsiteAccessIfPrompted()
 
-        let adjustedIndicator = safari.descendants(matching: .button)
-            .matching(NSPredicate(format: "label CONTAINS 'Plainly' AND label CONTAINS 'Oxford 8'"))
-            .firstMatch
+        let adjustedIndicator = findContaining(["Plainly", "Oxford 8"], in: safari)
         XCTAssertTrue(
             adjustedIndicator.waitForExistence(timeout: 75),
             "Plainly never exposed its adjusted-state indicator in normal iPad Safari",
@@ -81,10 +79,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
 
         let extensionSwitch = settings.switches.firstMatch
         XCTAssertTrue(extensionSwitch.waitForExistence(timeout: 5), "Plainly enable switch was not available")
-        if isOff(extensionSwitch) {
-            extensionSwitch.tap()
-        }
-        XCTAssertFalse(isOff(extensionSwitch), "Plainly remained disabled after toggling it")
+        enable(extensionSwitch)
 
         grantWebsiteAccessIfPresent()
     }
@@ -119,9 +114,9 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             XCTAssertTrue(tap("Plainly", in: safari, timeout: 5), "Plainly was not available in Safari's Extensions menu")
         }
 
-        let keyField = safari.secureTextFields["OpenAI API key"].firstMatch
-        let fallbackField = safari.textFields["OpenAI API key"].firstMatch
-        let field = keyField.exists ? keyField : fallbackField
+        // Query the accessibility tree without assuming whether Safari exposes the field
+        // as a text field or secure text field on a particular iPadOS release.
+        let field = find("OpenAI API key", in: safari)
         XCTAssertTrue(field.waitForExistence(timeout: 10), "Plainly popup did not expose the API-key field")
         field.tap()
         field.typeText(apiKey)
@@ -176,6 +171,13 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             .firstMatch
     }
 
+    private func findContaining(_ fragments: [String], in app: XCUIApplication) -> XCUIElement {
+        let predicates = fragments.map { NSPredicate(format: "label CONTAINS %@", $0) }
+        return app.descendants(matching: .any)
+            .matching(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
+            .firstMatch
+    }
+
     private func hasFrame(_ element: XCUIElement) -> Bool {
         let frame = element.frame
         return !frame.isNull && !frame.isEmpty && frame.width > 0 && frame.height > 0
@@ -183,6 +185,21 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
 
     private func tapCenter(_ element: XCUIElement) {
         element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    private func enable(_ toggle: XCUIElement) {
+        guard isOff(toggle) else { return }
+
+        // In iPad Settings the accessibility frame for this switch can span the complete
+        // row. XCUIElement.tap() therefore lands on the inert row centre. Target the
+        // trailing switch control explicitly and allow Settings time to publish its value.
+        toggle.coordinate(withNormalizedOffset: CGVector(dx: 0.95, dy: 0.5)).tap()
+
+        let deadline = Date().addingTimeInterval(5)
+        while isOff(toggle), Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+        }
+        XCTAssertFalse(isOff(toggle), "Plainly remained disabled after toggling it")
     }
 
     private func isOff(_ toggle: XCUIElement) -> Bool {
