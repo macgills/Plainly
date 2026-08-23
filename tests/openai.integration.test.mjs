@@ -3,28 +3,30 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
 import { simplifyWithOpenAI } from "../extension/openai.js";
-import { getReadingTarget, READING_SCHEMES } from "../extension/profiles.js";
+import { getReadingTarget, READING_SCHEMES } from "../extension/reading-targets.js";
 
 const TEST_KEY = "sk-test-plainly-integration-key";
 
-test("defines complete Oxford and F&P target ranges", () => {
+test("defines Oxford, F&P, and DIBELS target ranges", () => {
   assert.deepEqual(READING_SCHEMES.oxford.levels.slice(0, 3), ["1", "1+", "2"]);
   assert.equal(READING_SCHEMES.oxford.levels.at(-1), "20");
   assert.equal(READING_SCHEMES.fountasPinnell.levels.length, 26);
   assert.equal(READING_SCHEMES.fountasPinnell.levels.at(0), "A");
   assert.equal(READING_SCHEMES.fountasPinnell.levels.at(-1), "Z");
+  assert.deepEqual(READING_SCHEMES.dibels8.levels, ["K", "1", "2", "3", "4", "5", "6", "7", "8"]);
 });
 
-test("reading profiles become progressively less restrictive", () => {
-  assert.match(getReadingTarget("oxford", "3").guidance, /early reader/i);
-  assert.match(getReadingTarget("oxford", "18").guidance, /fluent primary reader/i);
-  assert.match(getReadingTarget("fountasPinnell", "C").guidance, /easiest end/i);
-  assert.match(getReadingTarget("fountasPinnell", "X").guidance, /most demanding end/i);
+test("DIBELS is represented as a grade language-access target, not an official text level", () => {
+  const target = getReadingTarget("dibels8", "4");
+  assert.equal(target.label, "DIBELS Grade 4");
+  assert.match(target.disclaimer, /assessment system, not a text-leveling scheme/i);
+  assert.match(target.guidance, /developing-elementary language access/i);
 });
 
 for (const target of [
   { scheme: "oxford", level: "8", expectedScheme: "Oxford Reading Tree" },
   { scheme: "fountasPinnell", level: "M", expectedScheme: "Fountas & Pinnell" },
+  { scheme: "dibels8", level: "4", expectedScheme: "DIBELS 8th Edition" },
 ]) {
   test(`calls Responses API with ${target.expectedScheme} ${target.level} guidance`, async () => {
     let receivedBody;
@@ -38,7 +40,7 @@ for (const target of [
     try {
       const result = await simplifyWithOpenAI({
         apiKey: TEST_KEY, apiUrl: `http://127.0.0.1:${port}/v1/responses`, model: "gpt-5-mini",
-        payload: { title: "Photosynthesis", ...target, blocks: [{ id: "block-0", text: "Photosynthesis is a system of biological processes by which phototrophic organisms convert light energy into chemical energy." }] },
+        payload: { title: "Photosynthesis", scheme: target.scheme, level: target.level, blocks: [{ id: "block-0", text: "Photosynthesis is a system of biological processes by which phototrophic organisms convert light energy into chemical energy." }] },
       });
       const userPayload = JSON.parse(receivedBody.input[1].content[0].text);
       assert.equal(receivedBody.model, "gpt-5-mini");
