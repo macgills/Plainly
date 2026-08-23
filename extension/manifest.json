@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Plainly",
-  "version": "0.2.0",
-  "description": "Browse Wikipedia at an adjusted reading level.",
+  "version": "0.3.0",
+  "description": "Browse articles at an adjusted reading level.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://en.wikipedia.org/*",
