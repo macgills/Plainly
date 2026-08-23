@@ -1,4 +1,4 @@
-import { READING_SCHEMES } from "./profiles.js";
+import { READING_SCHEMES } from "./reading-targets.js";
 
 const enabled = document.querySelector("#enabled");
 const apiKey = document.querySelector("#api-key");
@@ -71,7 +71,9 @@ function populateLevels(schemeId, selectedLevel) {
   level.replaceChildren(...definition.levels.map((value) => {
     const option = document.createElement("option");
     option.value = value;
-    option.textContent = schemeId === "oxford" ? `Oxford Level ${value}` : `F&P Level ${value}`;
+    if (schemeId === "oxford") option.textContent = `Oxford Level ${value}`;
+    else if (schemeId === "fountasPinnell") option.textContent = `F&P Level ${value}`;
+    else option.textContent = `DIBELS Grade ${value}`;
     option.selected = value === selectedLevel;
     return option;
   }));
