@@ -6,7 +6,7 @@ export const DEFAULT_MODEL = "gpt-5-mini";
 export async function simplifyWithOpenAI({ apiKey, payload, apiUrl = DEFAULT_OPENAI_API_URL, model = DEFAULT_MODEL, fetchImpl = fetch }) {
   validateApiKey(apiKey);
   validatePayload(payload);
-  const target = getReadingTarget(payload.scheme, payload.level);
+  const target = getReadingTarget(payload.scheme, payload.level, payload.assessment);
 
   const response = await fetchImpl(apiUrl, {
     method: "POST",
@@ -21,12 +21,18 @@ export async function simplifyWithOpenAI({ apiKey, payload, apiUrl = DEFAULT_OPE
           "Do not add facts, examples, explanations, causes, or conclusions from your own knowledge.",
           "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
           "Reduce linguistic barriers without reducing the intellectual content required by the source.",
-          "The named reading scheme is a transformation target, not an official assessment or certification of the webpage or reader.",
+          "The named reading scheme or assessment-derived target is a Plainly transformation target, not an official assessment or certification of the webpage or reader.",
           "Return one adjusted string for every supplied block id.",
         ].join(" ") }] },
         { role: "user", content: [{ type: "input_text", text: JSON.stringify({
           title: payload.title ?? "",
-          readingTarget: { scheme: target.schemeName, level: target.level, guidance: target.guidance, qualification: target.disclaimer },
+          readingTarget: {
+            scheme: target.schemeName,
+            level: target.level,
+            guidance: target.guidance,
+            qualification: target.disclaimer,
+            recommendation: target.recommendation ?? null,
+          },
           blocks: payload.blocks,
         }) }] },
       ],
@@ -66,7 +72,7 @@ function validateApiKey(apiKey) {
 }
 
 function validatePayload(payload) {
-  getReadingTarget(payload?.scheme, payload?.level);
+  getReadingTarget(payload?.scheme, payload?.level, payload?.assessment);
   if (!Array.isArray(payload?.blocks) || payload.blocks.length === 0 || payload.blocks.length > 8) throw new Error("blocks must contain between 1 and 8 items");
   for (const block of payload.blocks) {
     if (typeof block?.id !== "string" || typeof block?.text !== "string" || block.text.trim().length === 0) throw new Error("each block must contain a non-empty id and text");
