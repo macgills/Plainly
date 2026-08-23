@@ -14,6 +14,10 @@
     "style",
     "script",
   ].join(",");
+  const EXCLUDED_INLINE_CONTENT = [
+    "sup.reference",
+    ".mw-editsection",
+  ].join(",");
 
   document.documentElement.classList.add("plainly-pending");
   void bootstrap();
@@ -50,8 +54,8 @@
     document.documentElement.classList.add("plainly-enabled");
     await waitForArticle();
 
-    const elements = collectReadableElements();
-    if (elements.length === 0) {
+    const readableBlocks = collectReadableBlocks();
+    if (readableBlocks.length === 0) {
       leaveAdjustedMode();
       return;
     }
@@ -66,7 +70,7 @@
         settings.level,
         settings.dibelsPeriod ?? "",
         settings.dibelsMazeScore ?? "",
-        elements.map((element) => element.textContent ?? ""),
+        readableBlocks.map((block) => block.sourceText),
         1,
         4,
       );
@@ -77,7 +81,7 @@
     }
 
     const sourceBlocks = [...session.sourceBlocks()];
-    if (sourceBlocks.length !== elements.length) {
+    if (sourceBlocks.length !== readableBlocks.length) {
       console.warn("Plainly core returned a different block count; showing the original article.");
       leaveAdjustedMode();
       return;
@@ -86,13 +90,14 @@
     const blocks = sourceBlocks.map((source, index) => ({
       key: source.key,
       text: source.text,
-      element: elements[index],
+      element: readableBlocks[index].element,
+      originalText: readableBlocks[index].originalText,
     }));
     const blocksByKey = new Map(blocks.map((block) => [block.key, block]));
 
     for (const block of blocks) {
       block.element.dataset.plainlyState = "loading";
-      block.element.dataset.plainlyOriginal = block.text;
+      block.element.dataset.plainlyOriginal = block.originalText;
     }
 
     document.documentElement.classList.remove("plainly-pending");
@@ -195,11 +200,21 @@
     });
   }
 
-  function collectReadableElements() {
-    return [...document.querySelectorAll(BLOCK_SELECTOR)].filter((element) => {
-      if (element.closest(EXCLUDED_ANCESTORS)) return false;
-      return (element.textContent ?? "").replace(/\s+/g, " ").trim().length >= 40;
-    });
+  function collectReadableBlocks() {
+    return [...document.querySelectorAll(BLOCK_SELECTOR)]
+      .filter((element) => !element.closest(EXCLUDED_ANCESTORS))
+      .map((element) => ({
+        element,
+        originalText: element.textContent ?? "",
+        sourceText: extractReadableText(element),
+      }))
+      .filter((block) => block.sourceText.replace(/\s+/g, " ").trim().length >= 40);
+  }
+
+  function extractReadableText(element) {
+    const clone = element.cloneNode(true);
+    for (const excluded of clone.querySelectorAll(EXCLUDED_INLINE_CONTENT)) excluded.remove();
+    return clone.textContent ?? "";
   }
 
   function applyDecisions(decisions, blocksByKey) {
