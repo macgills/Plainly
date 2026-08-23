@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "node tools/build-browser.mjs",
+    "ipad": "bash tools/run-ipad-local.sh",
     "test": "npm run test:openai && npm run test:safari-manifest && npm run test:integration",
     "test:openai": "node --test tests/openai.integration.test.mjs",
     "test:safari-manifest": "node --test tests/safari-manifest.test.mjs",
