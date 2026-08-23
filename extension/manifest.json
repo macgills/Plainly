@@ -5,9 +5,7 @@
   "description": "Browse Wikipedia at an adjusted reading target.",
   "permissions": ["storage"],
   "host_permissions": [
-    "https://en.wikipedia.org/*"
-  ],
-  "optional_host_permissions": [
+    "https://en.wikipedia.org/*",
     "https://api.openai.com/*"
   ],
   "background": {

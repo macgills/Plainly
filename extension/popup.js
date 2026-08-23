@@ -90,10 +90,9 @@ async function updateSettings(settings) {
 
 async function saveApiKey() {
   // Safari 18.4+ enforces its per-site permission model for cross-origin fetches from
-  // extension pages. A declared host permission is necessary but not sufficient: the
-  // extension must request the origin before fetch can use it. Start this directly from
-  // the Save gesture so Safari can prompt when required. Chromium already reports the
-  // required host permission as granted, so this remains a no-op there.
+  // extension pages. The Safari package makes the API host optional, so request it
+  // directly from the Save gesture. Chromium keeps this host required and skips the
+  // Safari-only permission flow entirely.
   const access = requestOpenAIAccess();
   await ready;
   const value = apiKey.value.trim();
@@ -120,6 +119,7 @@ async function saveApiKey() {
 }
 
 async function requestOpenAIAccess() {
+  if (location.protocol !== "safari-web-extension:") return true;
   if (!chrome.permissions?.contains || !chrome.permissions?.request) return true;
 
   try {

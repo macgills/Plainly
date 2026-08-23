@@ -4,6 +4,7 @@ import XCTest
 final class PlainlySafariAcceptanceTests: XCTestCase {
     private let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
     private let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+    private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     private let wikipedia = URL(string: "https://en.wikipedia.org/wiki/Photosynthesis")!
 
     override func setUpWithError() throws {
@@ -16,6 +17,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             keep(XCUIScreen.main.screenshot(), name: "failure")
             keep(settings.debugDescription, name: "settings-accessibility")
             keep(safari.debugDescription, name: "safari-accessibility")
+            keep(springboard.debugDescription, name: "springboard-accessibility")
         }
         try await super.tearDown()
     }
@@ -96,16 +98,11 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     }
 
     private func grantWebsiteAccessIfPresent() {
-        // Safari treats MV3 host permissions as user-controlled website access. Plainly
-        // needs both the page host for its content script and api.openai.com for the
-        // background fetch. Granting only Wikipedia lets the UI run but blocks adjustment.
         if grantWebsiteAccess("All Websites") {
             return
         }
 
-        for site in ["en.wikipedia.org", "api.openai.com"] {
-            _ = grantWebsiteAccess(site)
-        }
+        _ = grantWebsiteAccess("en.wikipedia.org")
     }
 
     private func grantWebsiteAccess(_ site: String) -> Bool {
@@ -135,19 +132,27 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             XCTAssertTrue(tap("Plainly", in: safari, timeout: 5), "Plainly was not available in Safari's Extensions menu")
         }
 
-        // Query the accessibility tree without assuming whether Safari exposes the field
-        // as a text field or secure text field on a particular iPadOS release.
         let field = find("OpenAI API key", in: safari)
         XCTAssertTrue(field.waitForExistence(timeout: 10), "Plainly popup did not expose the API-key field")
         field.tap()
         field.typeText(apiKey)
         XCTAssertTrue(tap("Save", in: safari, timeout: 5), "Plainly Save button was unavailable")
+        allowOpenAIHostAccessIfPrompted()
         XCTAssertTrue(
             find("API key saved on this device.", in: safari).waitForExistence(timeout: 10),
-            "Plainly did not persist the API key",
+            "Plainly did not persist the API key after requesting OpenAI host access",
         )
 
         safari.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.50)).tap()
+    }
+
+    private func allowOpenAIHostAccessIfPrompted() {
+        let labels = ["Allow", "Always Allow", "Allow Access"]
+        for app in [safari, springboard] {
+            for label in labels where tap(label, in: app, timeout: 2) {
+                return
+            }
+        }
     }
 
     private func allowWebsiteAccessIfPrompted() {
