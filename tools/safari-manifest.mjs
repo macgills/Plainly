@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SAFARI_BACKGROUND = "background-safari.js";
-const OPENAI_ORIGIN = "https://api.openai.com/*";
 
 export function toSafariManifest(manifest) {
   const result = structuredClone(manifest);
@@ -12,16 +11,6 @@ export function toSafariManifest(manifest) {
     result.background = {
       service_worker: SAFARI_BACKGROUND,
     };
-  }
-
-  const hostPermissions = Array.isArray(result.host_permissions)
-    ? result.host_permissions
-    : [];
-  if (hostPermissions.includes(OPENAI_ORIGIN)) {
-    result.host_permissions = hostPermissions.filter((origin) => origin !== OPENAI_ORIGIN);
-    result.optional_host_permissions = [
-      ...new Set([...(result.optional_host_permissions ?? []), OPENAI_ORIGIN]),
-    ];
   }
 
   return result;

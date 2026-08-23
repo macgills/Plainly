@@ -9,6 +9,11 @@ import {
   toSafariManifest,
 } from "../tools/safari-manifest.mjs";
 
+const REQUIRED_HOSTS = [
+  "https://en.wikipedia.org/*",
+  "https://api.openai.com/*",
+];
+
 test("converts the Chrome module service worker to a Safari classic MV3 service worker", () => {
   const chromeManifest = {
     manifest_version: 3,
@@ -29,23 +34,17 @@ test("converts the Chrome module service worker to a Safari classic MV3 service 
   });
 });
 
-test("moves OpenAI host access to an optional Safari permission", () => {
+test("preserves required website and OpenAI host permissions for Safari", () => {
   const chromeManifest = {
     manifest_version: 3,
-    host_permissions: [
-      "https://en.wikipedia.org/*",
-      "https://api.openai.com/*",
-    ],
+    host_permissions: REQUIRED_HOSTS,
   };
 
   const safariManifest = toSafariManifest(chromeManifest);
 
-  assert.deepEqual(safariManifest.host_permissions, ["https://en.wikipedia.org/*"]);
-  assert.deepEqual(safariManifest.optional_host_permissions, ["https://api.openai.com/*"]);
-  assert.deepEqual(chromeManifest.host_permissions, [
-    "https://en.wikipedia.org/*",
-    "https://api.openai.com/*",
-  ]);
+  assert.deepEqual(safariManifest.host_permissions, REQUIRED_HOSTS);
+  assert.equal(safariManifest.optional_host_permissions, undefined);
+  assert.deepEqual(chromeManifest.host_permissions, REQUIRED_HOSTS);
 });
 
 test("bundles the OpenAI adapter and Chrome background module into Safari classic background code", () => {
@@ -60,7 +59,7 @@ test("bundles the OpenAI adapter and Chrome background module into Safari classi
   assert.doesNotMatch(bundled, /^\s*(?:import|export)\b/m);
 });
 
-test("assembles a Safari extension without dropping the generated KMP runtime", async () => {
+test("assembles a Safari extension without dropping KMP runtime or required hosts", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "plainly-safari-manifest-"));
   const source = path.join(root, "extension");
   const target = path.join(root, "safari-extension");
@@ -71,10 +70,7 @@ test("assembles a Safari extension without dropping the generated KMP runtime", 
       manifest_version: 3,
       name: "Plainly",
       version: "0.3.0",
-      host_permissions: [
-        "https://en.wikipedia.org/*",
-        "https://api.openai.com/*",
-      ],
+      host_permissions: REQUIRED_HOSTS,
       background: {
         service_worker: "background.js",
         type: "module",
@@ -98,8 +94,8 @@ test("assembles a Safari extension without dropping the generated KMP runtime", 
     assert.deepEqual(manifest.background, {
       service_worker: "background-safari.js",
     });
-    assert.deepEqual(manifest.host_permissions, ["https://en.wikipedia.org/*"]);
-    assert.deepEqual(manifest.optional_host_permissions, ["https://api.openai.com/*"]);
+    assert.deepEqual(manifest.host_permissions, REQUIRED_HOSTS);
+    assert.equal(manifest.optional_host_permissions, undefined);
     const safariBackground = await readFile(path.join(target, "background-safari.js"), "utf8");
     assert.match(safariBackground, /async function simplifyWithOpenAI/);
     assert.doesNotMatch(safariBackground, /^\s*(?:import|export)\b/m);

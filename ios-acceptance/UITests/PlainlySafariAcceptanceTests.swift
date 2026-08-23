@@ -4,7 +4,6 @@ import XCTest
 final class PlainlySafariAcceptanceTests: XCTestCase {
     private let settings = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
     private let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-    private let springboard = XCUIApplication(bundleIdentifier: "com.apple.springboard")
     private let wikipedia = URL(string: "https://en.wikipedia.org/wiki/Photosynthesis")!
 
     override func setUpWithError() throws {
@@ -17,7 +16,6 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             keep(XCUIScreen.main.screenshot(), name: "failure")
             keep(settings.debugDescription, name: "settings-accessibility")
             keep(safari.debugDescription, name: "safari-accessibility")
-            keep(springboard.debugDescription, name: "springboard-accessibility")
         }
         try await super.tearDown()
     }
@@ -98,15 +96,23 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     }
 
     private func grantWebsiteAccessIfPresent() {
+        // Safari treats required MV3 hosts as user-controlled website access. Grant every
+        // required host here so the content script and background OpenAI fetch are both
+        // authorized before Safari launches.
         if grantWebsiteAccess("All Websites") {
             return
         }
 
-        _ = grantWebsiteAccess("en.wikipedia.org")
+        for site in ["api.openai.com", "en.wikipedia.org"] {
+            XCTAssertTrue(
+                grantWebsiteAccess(site),
+                "Safari did not expose or grant required Plainly access to \(site)",
+            )
+        }
     }
 
     private func grantWebsiteAccess(_ site: String) -> Bool {
-        guard tap(site, in: settings, timeout: 1) else { return false }
+        guard scrollAndTapBidirectionally(site, in: settings) else { return false }
         return tap("Allow", in: settings, timeout: 2)
             || tap("Always Allow", in: settings, timeout: 2)
     }
@@ -132,27 +138,19 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             XCTAssertTrue(tap("Plainly", in: safari, timeout: 5), "Plainly was not available in Safari's Extensions menu")
         }
 
+        // Query the accessibility tree without assuming whether Safari exposes the field
+        // as a text field or secure text field on a particular iPadOS release.
         let field = find("OpenAI API key", in: safari)
         XCTAssertTrue(field.waitForExistence(timeout: 10), "Plainly popup did not expose the API-key field")
         field.tap()
         field.typeText(apiKey)
         XCTAssertTrue(tap("Save", in: safari, timeout: 5), "Plainly Save button was unavailable")
-        allowOpenAIHostAccessIfPrompted()
         XCTAssertTrue(
             find("API key saved on this device.", in: safari).waitForExistence(timeout: 10),
-            "Plainly did not persist the API key after requesting OpenAI host access",
+            "Plainly did not persist the API key",
         )
 
         safari.coordinate(withNormalizedOffset: CGVector(dx: 0.05, dy: 0.50)).tap()
-    }
-
-    private func allowOpenAIHostAccessIfPrompted() {
-        let labels = ["Allow", "Always Allow", "Allow Access"]
-        for app in [safari, springboard] {
-            for label in labels where tap(label, in: app, timeout: 2) {
-                return
-            }
-        }
     }
 
     private func allowWebsiteAccessIfPrompted() {
@@ -170,6 +168,28 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
             }
             app.swipeUp()
         }
+        return false
+    }
+
+    private func scrollAndTapBidirectionally(_ label: String, in app: XCUIApplication) -> Bool {
+        if tap(label, in: app, timeout: 0.5) {
+            return true
+        }
+
+        for _ in 0..<8 {
+            app.swipeUp()
+            if tap(label, in: app, timeout: 0.5) {
+                return true
+            }
+        }
+
+        for _ in 0..<8 {
+            app.swipeDown()
+            if tap(label, in: app, timeout: 0.5) {
+                return true
+            }
+        }
+
         return false
     }
 
