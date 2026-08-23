@@ -1,7 +1,7 @@
 import { simplifyWithOpenAI } from "./openai.js";
 import { DEFAULT_READING_TARGET, isValidReadingTarget } from "./reading-targets.js";
 
-const DEFAULT_SETTINGS = Object.freeze({ enabled: true, ...DEFAULT_READING_TARGET });
+const DEFAULT_SETTINGS = Object.freeze({ enabled: true, ...DEFAULT_READING_TARGET, dibelsPeriod: "middle", dibelsMazeScore: "" });
 
 void restrictSecretStorage();
 chrome.runtime.onInstalled.addListener(() => void restrictSecretStorage());
@@ -26,7 +26,13 @@ async function handleMessage(message) {
 async function getPublicSettings() {
   const stored = await chrome.storage.local.get({ ...DEFAULT_SETTINGS, openAIApiKey: "" });
   const target = isValidReadingTarget(stored.scheme, stored.level) ? { scheme: stored.scheme, level: String(stored.level) } : DEFAULT_READING_TARGET;
-  return { enabled: stored.enabled, ...target, hasApiKey: typeof stored.openAIApiKey === "string" && stored.openAIApiKey.length >= 20 };
+  return {
+    enabled: stored.enabled,
+    ...target,
+    dibelsPeriod: stored.dibelsPeriod,
+    dibelsMazeScore: stored.dibelsMazeScore,
+    hasApiKey: typeof stored.openAIApiKey === "string" && stored.openAIApiKey.length >= 20,
+  };
 }
 
 async function updateSettings(settings) {
@@ -40,7 +46,17 @@ async function updateSettings(settings) {
     const scheme = settings.scheme ?? current.scheme;
     const level = String(settings.level ?? current.level);
     if (!isValidReadingTarget(scheme, level)) throw new Error("Unsupported Plainly reading target");
-    update.scheme = scheme; update.level = level;
+    update.scheme = scheme;
+    update.level = level;
+  }
+  if (Object.hasOwn(settings ?? {}, "dibelsPeriod")) {
+    if (!["beginning", "middle", "end"].includes(settings.dibelsPeriod)) throw new Error("Invalid DIBELS benchmark period");
+    update.dibelsPeriod = settings.dibelsPeriod;
+  }
+  if (Object.hasOwn(settings ?? {}, "dibelsMazeScore")) {
+    const value = settings.dibelsMazeScore;
+    if (value !== "" && (!Number.isFinite(Number(value)) || Number(value) < 0)) throw new Error("Invalid DIBELS Maze score");
+    update.dibelsMazeScore = value === "" ? "" : String(value);
   }
   await chrome.storage.local.set(update);
 }
