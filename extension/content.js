@@ -66,7 +66,13 @@
     }
   }
 
-  function targetLabel(settings) { return settings.scheme === "oxford" ? `Oxford ${settings.level}` : `F&P ${settings.level}`; }
+  function targetLabel(settings) {
+    if (settings.scheme === "oxford") return `Oxford ${settings.level}`;
+    if (settings.scheme === "fountasPinnell") return `F&P ${settings.level}`;
+    if (settings.scheme === "dibels8") return `DIBELS Grade ${settings.level}`;
+    return String(settings.level);
+  }
+
   function addIndicator(settings) {
     const existing = document.getElementById("plainly-indicator"); if (existing) return existing;
     const label = targetLabel(settings);
