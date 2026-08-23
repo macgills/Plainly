@@ -45,6 +45,31 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: plainly-kmp-browser
+          path: extension/generated
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Assemble Safari-compatible extension manifest
+        run: npm run build:safari-extension
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "9.5.0"
+          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+      - name: Cache Kotlin/Native toolchain
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ runner.arch }}-kotlin-2.4.10
+      - name: Link KMP iOS simulator framework
+        run: gradle -p core --no-daemon linkDebugFrameworkIosSimulatorArm64
 
       - name: Start iPad simulator boot
         if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
@@ -87,31 +112,6 @@ jobs:
           echo "iPad simulator: $SIMULATOR_UDID"
           xcrun simctl boot "$SIMULATOR_UDID" 2>/dev/null || true
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: plainly-kmp-browser
-          path: extension/generated
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Assemble Safari-compatible extension manifest
-        run: npm run build:safari-extension
-      - uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "9.5.0"
-          cache-read-only: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-      - name: Cache Kotlin/Native toolchain
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/cache@v4
-        with:
-          path: ~/.konan
-          key: konan-${{ runner.os }}-${{ runner.arch }}-kotlin-2.4.10
-      - name: Link KMP iOS simulator framework
-        run: gradle -p core --no-daemon linkDebugFrameworkIosSimulatorArm64
       - name: Package and build Safari Web Extension host
         shell: bash
         run: |
