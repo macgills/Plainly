@@ -10,13 +10,14 @@ class AdjustmentSessionTest {
     @Test
     fun sessionOwnsViewportFirstBatchingAndResponseReconciliation() {
         val page = pageWithBlocks(7)
-        val session = AdjustmentSession(page, ReadingLevel.of(2))
+        val session = AdjustmentSession(page, ReadingTarget.Default)
         val batchSizes = mutableListOf<Int>()
         var ready = 0
 
         while (!session.isComplete) {
             val request = requireNotNull(session.nextRequest())
             batchSizes += request.blocks.size
+            assertEquals(ReadingTarget.Default, request.readingTarget)
             assertFalse(session.isComplete)
 
             val events = session.accept(
@@ -43,7 +44,7 @@ class AdjustmentSessionTest {
         )
         val session = AdjustmentSession(
             PageSnapshot("https://example.test", "Example", listOf(source)),
-            ReadingLevel.of(1),
+            ReadingTarget(ReadingScheme.FountasPinnell, "M"),
         )
 
         requireNotNull(session.nextRequest())
@@ -58,7 +59,7 @@ class AdjustmentSessionTest {
     @Test
     fun failedBatchCanAdvanceToTheNextBatch() {
         val page = pageWithBlocks(3)
-        val session = AdjustmentSession(page, ReadingLevel.of(2), batchSize = 2)
+        val session = AdjustmentSession(page, ReadingTarget.Default, batchSize = 2)
 
         val first = requireNotNull(session.nextRequest())
         assertEquals(1, first.blocks.size)

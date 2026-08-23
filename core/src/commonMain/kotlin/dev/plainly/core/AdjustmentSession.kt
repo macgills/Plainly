@@ -2,7 +2,7 @@ package dev.plainly.core
 
 class AdjustmentSession(
     private val page: PageSnapshot,
-    private val readingLevel: ReadingLevel,
+    private val readingTarget: ReadingTarget,
     private val fidelityGuard: FidelityGuard = FidelityGuard(),
     firstBatchSize: Int = 1,
     batchSize: Int = 4,
@@ -25,7 +25,7 @@ class AdjustmentSession(
         val batch = batches[batchIndex]
         activeBatch = batch
         return AdjustmentRequest(
-            readingLevel = readingLevel,
+            readingTarget = readingTarget,
             pageUrl = page.url,
             pageTitle = page.title,
             blocks = batch,

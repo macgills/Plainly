@@ -6,8 +6,13 @@ import dev.plainly.core.AdjustmentResponse
 import dev.plainly.core.AdjustmentSession
 import dev.plainly.core.BlockFactory
 import dev.plainly.core.BlockKey
+import dev.plainly.core.DibelsMazeAssessment
+import dev.plainly.core.DibelsPeriod
 import dev.plainly.core.PageSnapshot
-import dev.plainly.core.ReadingLevel
+import dev.plainly.core.ReadingScheme
+import dev.plainly.core.ReadingTarget
+import dev.plainly.core.ReadingTargetProfile
+import dev.plainly.core.ReadingTargets
 import dev.plainly.core.SourceBlock
 import dev.plainly.core.TextNormalization
 
@@ -27,10 +32,50 @@ class PlainlyDecisionJs(
 )
 
 @JsExport
+class PlainlyReadingSchemeJs(
+    val id: String,
+    val name: String,
+    val levels: Array<String>,
+    val disclaimer: String,
+)
+
+@JsExport
+class PlainlyDibelsPeriodJs(
+    val id: String,
+    val name: String,
+)
+
+@JsExport
+class PlainlyDibelsRecommendationJs(
+    val band: String,
+    val benchmarkLabel: String,
+    val support: String,
+    val assessedGrade: String,
+    val accessGrade: String,
+    val lexile: String,
+    val fountasPinnell: String,
+    val oxford: String,
+)
+
+@JsExport
+class PlainlyReadingTargetJs(
+    val schemeId: String,
+    val schemeName: String,
+    val level: String,
+    val label: String,
+    val guidance: String,
+    val disclaimer: String,
+    val recommendation: PlainlyDibelsRecommendationJs?,
+)
+
+@JsExport
 class PlainlySessionJs(
     url: String,
     title: String,
-    level: Int,
+    scheme: String,
+    level: String,
+    dibelsPeriod: String,
+    dibelsScore: String,
     texts: Array<String>,
     firstBatchSize: Int,
     batchSize: Int,
@@ -42,7 +87,7 @@ class PlainlySessionJs(
     )
     private val session = AdjustmentSession(
         page = page,
-        readingLevel = ReadingLevel.of(level),
+        readingTarget = parseReadingTarget(scheme, level, dibelsPeriod, dibelsScore),
         firstBatchSize = firstBatchSize,
         batchSize = batchSize,
     )
@@ -76,22 +121,95 @@ class PlainlySessionJs(
 object PlainlyCoreJs {
     fun normalizeText(text: String): String = TextNormalization.normalize(text)
 
-    fun isReadingLevelSupported(level: Int): Boolean = level in 1..5
+    fun readingSchemes(): Array<PlainlyReadingSchemeJs> = ReadingScheme.entries
+        .map { scheme ->
+            PlainlyReadingSchemeJs(
+                id = scheme.id,
+                name = scheme.displayName,
+                levels = ReadingTargets.levels(scheme).toTypedArray(),
+                disclaimer = scheme.disclaimer,
+            )
+        }
+        .toTypedArray()
+
+    fun dibelsPeriods(): Array<PlainlyDibelsPeriodJs> = DibelsPeriod.entries
+        .map { PlainlyDibelsPeriodJs(it.id, it.displayName) }
+        .toTypedArray()
+
+    fun defaultReadingTarget(): PlainlyReadingTargetJs =
+        ReadingTargets.resolve(ReadingTarget.Default).toJs()
+
+    fun resolveReadingTarget(
+        scheme: String,
+        level: String,
+        dibelsPeriod: String,
+        dibelsScore: String,
+    ): PlainlyReadingTargetJs = ReadingTargets
+        .resolve(parseReadingTarget(scheme, level, dibelsPeriod, dibelsScore))
+        .toJs()
 
     fun createSession(
         url: String,
         title: String,
-        level: Int,
+        scheme: String,
+        level: String,
+        dibelsPeriod: String,
+        dibelsScore: String,
         texts: Array<String>,
         firstBatchSize: Int,
         batchSize: Int,
     ): PlainlySessionJs = PlainlySessionJs(
         url = url,
         title = title,
+        scheme = scheme,
         level = level,
+        dibelsPeriod = dibelsPeriod,
+        dibelsScore = dibelsScore,
         texts = texts,
         firstBatchSize = firstBatchSize,
         batchSize = batchSize,
+    )
+}
+
+private fun parseReadingTarget(
+    schemeId: String,
+    level: String,
+    dibelsPeriod: String,
+    dibelsScore: String,
+): ReadingTarget {
+    val scheme = ReadingScheme.fromId(schemeId)
+    val assessment = if (scheme == ReadingScheme.DibelsMaze && dibelsScore.isNotBlank()) {
+        DibelsMazeAssessment(
+            period = DibelsPeriod.fromId(dibelsPeriod),
+            score = requireNotNull(dibelsScore.toDoubleOrNull()) { "Invalid DIBELS Maze score" },
+        )
+    } else {
+        null
+    }
+    return ReadingTarget(scheme = scheme, level = level, assessment = assessment)
+}
+
+private fun ReadingTargetProfile.toJs(): PlainlyReadingTargetJs {
+    val recommendationJs = recommendation?.let {
+        PlainlyDibelsRecommendationJs(
+            band = it.band.id,
+            benchmarkLabel = it.band.benchmarkLabel,
+            support = it.band.support,
+            assessedGrade = it.assessedGrade,
+            accessGrade = it.accessGrade,
+            lexile = it.crosswalk.lexile,
+            fountasPinnell = it.crosswalk.fountasPinnell,
+            oxford = it.crosswalk.oxford,
+        )
+    }
+    return PlainlyReadingTargetJs(
+        schemeId = scheme.id,
+        schemeName = scheme.displayName,
+        level = level,
+        label = label,
+        guidance = guidance,
+        disclaimer = disclaimer,
+        recommendation = recommendationJs,
     )
 }
 

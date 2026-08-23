@@ -1,6 +1,6 @@
 # Plainly Extension Core
 
-A platform-neutral Kotlin Multiplatform engine for reading-level browser extensions.
+A platform-neutral Kotlin Multiplatform engine for reading-target browser extensions.
 
 This module deliberately contains **no Chrome APIs, Safari APIs, DOM selectors, Wikipedia knowledge, OpenAI code, API keys, or UI**. It models the reusable part of an extension that adjusts source text while preserving the original page as the authority.
 
@@ -21,6 +21,8 @@ Browser / native host
           │
           ▼
 Plainly Extension Core
+  ├─ owns Oxford, Fountas & Pinnell and DIBELS Maze reading targets
+  ├─ classifies DIBELS Maze benchmark scores and derives Plainly access recommendations
   ├─ normalizes source text
   ├─ creates stable block identities
   ├─ prioritizes the first visible block
@@ -30,7 +32,9 @@ Plainly Extension Core
   └─ emits Pending / Ready / Rejected / Failed / Complete
 ```
 
-`AdjustmentProvider` is the only model-facing port. A host can implement it with OpenAI, a school backend, another model provider, or a deterministic test double.
+`AdjustmentProvider` is the only model-facing port. A host can implement it with OpenAI, a school backend, another model provider, or a deterministic test double. `AdjustmentRequest` carries a typed `ReadingTarget`, so every host uses the same scheme validation and recommendation semantics.
+
+DIBELS Maze remains an assessment, not a text-leveling scheme. Plainly uses the official benchmark cut points as an input to its own conservative language-access recommendation. Lexile, F&P and Oxford ranges are approximate product crosswalks, not official conversions or certifications.
 
 ## Why stable source keys matter
 
@@ -45,17 +49,7 @@ The engine never instructs a host to discard source content. `Rejected` and `Fai
 With Gradle 9.5+ available:
 
 ```bash
-gradle -p core jvmTest jsNodeTest compileKotlinJs compileCommonMainKotlinMetadata
+gradle -p core jvmTest jsNodeTest compileCommonMainKotlinMetadata jsBrowserProductionWebpack
 ```
 
-CI runs the JVM and JS tests on Linux. iOS binaries are intentionally left to an eventual macOS packaging workflow.
-
-## Next integration step
-
-The current Chrome prototype should become a thin adapter:
-
-```text
-content script -> collect DOM blocks -> PlainlyCore JS -> runtime/provider -> events -> DOM
-```
-
-Safari gets a separate thin adapter around the same generated JS core. The iPad host app can optionally consume the `PlainlyCore` framework for shared settings/policy code, but the Safari Web Extension itself still runs web-extension JavaScript.
+The production browser bundle exports target definitions, target resolution and the adjustment session through `PlainlyCoreJs`. Chrome and Safari therefore share the same Kotlin policy code while retaining thin platform-specific DOM and storage adapters.

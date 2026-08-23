@@ -35,12 +35,12 @@ class AdjustmentEngine(
 
     suspend fun adjust(
         page: PageSnapshot,
-        readingLevel: ReadingLevel,
+        readingTarget: ReadingTarget,
         emit: (AdjustmentEvent) -> Unit,
     ) {
         val session = AdjustmentSession(
             page = page,
-            readingLevel = readingLevel,
+            readingTarget = readingTarget,
             fidelityGuard = fidelityGuard,
             firstBatchSize = firstBatchSize,
             batchSize = batchSize,

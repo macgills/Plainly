@@ -15,6 +15,7 @@ class AdjustmentEngineTest {
             val requests = mutableListOf<List<BlockKey>>()
             val events = mutableListOf<AdjustmentEvent>()
             val provider = AdjustmentProvider { request ->
+                assertEquals(ReadingTarget.Default, request.readingTarget)
                 requests += request.blocks.map(SourceBlock::key)
                 AdjustmentResponse(
                     request.blocks.map { source ->
@@ -23,7 +24,7 @@ class AdjustmentEngineTest {
                 )
             }
 
-            AdjustmentEngine(provider).adjust(page, ReadingLevel.of(2), events::add)
+            AdjustmentEngine(provider).adjust(page, ReadingTarget.Default, events::add)
 
             assertEquals(listOf(1, 4, 2), requests.map { it.size })
             assertEquals(7, events.count { it is AdjustmentEvent.Ready })
@@ -43,7 +44,11 @@ class AdjustmentEngineTest {
                 AdjustmentResponse(request.blocks.map { AdjustedBlock(it.key, "Simpler ${it.text}") })
             }
 
-            AdjustmentEngine(provider, batchSize = 2).adjust(page, ReadingLevel.of(1), events::add)
+            AdjustmentEngine(provider, batchSize = 2).adjust(
+                page,
+                ReadingTarget(ReadingScheme.Oxford, "5"),
+                events::add,
+            )
 
             assertEquals(1, events.count { it is AdjustmentEvent.Failed })
             assertEquals(2, events.count { it is AdjustmentEvent.Ready })
@@ -58,7 +63,7 @@ class AdjustmentEngineTest {
             val events = mutableListOf<AdjustmentEvent>()
             val provider = AdjustmentProvider { AdjustmentResponse(emptyList()) }
 
-            AdjustmentEngine(provider).adjust(page, ReadingLevel.of(2), events::add)
+            AdjustmentEngine(provider).adjust(page, ReadingTarget.Default, events::add)
 
             val failure = events.filterIsInstance<AdjustmentEvent.Failed>().single()
             assertEquals(page.blocks, failure.blocks)

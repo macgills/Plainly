@@ -21,7 +21,7 @@ data class PageSnapshot(
 )
 
 data class AdjustmentRequest(
-    val readingLevel: ReadingLevel,
+    val readingTarget: ReadingTarget,
     val pageUrl: String,
     val pageTitle: String,
     val blocks: List<SourceBlock>,
