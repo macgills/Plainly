@@ -57,7 +57,17 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         settings.launch()
 
         if tap("Apps", in: settings, timeout: 5) {
-            XCTAssertTrue(scrollAndTap("Safari", in: settings), "Safari settings were not reachable from Settings > Apps")
+            // On iPad the Apps pane virtualizes its alphabetic list. Searching it is both
+            // faster and substantially more reliable under XCUITest than probing absent
+            // typed elements while scrolling.
+            let searchApps = settings.searchFields["Search Apps"].firstMatch
+            XCTAssertTrue(searchApps.waitForExistence(timeout: 5), "Settings > Apps search field was unavailable")
+            searchApps.tap()
+            searchApps.typeText("Safari")
+
+            let safariRow = settings.cells.containing(.staticText, identifier: "Safari").firstMatch
+            XCTAssertTrue(safariRow.waitForExistence(timeout: 5), "Safari was not found in Settings > Apps")
+            tapCenter(safariRow)
         } else {
             let search = settings.searchFields.firstMatch
             XCTAssertTrue(search.waitForExistence(timeout: 5), "Settings search field was unavailable")
@@ -69,10 +79,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         XCTAssertTrue(scrollAndTap("Extensions", in: settings), "Safari Extensions settings were not found")
         XCTAssertTrue(scrollAndTap("Plainly", in: settings), "Installed Plainly extension was not listed by Safari")
 
-        let namedSwitch = settings.switches
-            .matching(NSPredicate(format: "label CONTAINS[c] 'Allow Extension' OR label CONTAINS[c] 'Plainly'"))
-            .firstMatch
-        let extensionSwitch = namedSwitch.exists ? namedSwitch : settings.switches.firstMatch
+        let extensionSwitch = settings.switches.firstMatch
         XCTAssertTrue(extensionSwitch.waitForExistence(timeout: 5), "Plainly enable switch was not available")
         if isOff(extensionSwitch) {
             extensionSwitch.tap()
@@ -146,34 +153,36 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     }
 
     private func tap(_ label: String, in app: XCUIApplication, timeout: TimeInterval) -> Bool {
-        let exact = NSPredicate(format: "label == %@ OR identifier == %@", label, label)
-        let containingRow = NSPredicate(format: "label CONTAINS[c] %@ OR identifier == %@", label, label)
-        let candidates = [
-            app.buttons.matching(exact).firstMatch,
-            app.cells.matching(exact).firstMatch,
-            app.cells.matching(containingRow).firstMatch,
-            app.links.matching(exact).firstMatch,
-            app.staticTexts.matching(exact).firstMatch,
-        ]
-        let deadline = Date().addingTimeInterval(timeout)
+        // Query .any first: querying a missing typed element inside Apple's Settings
+        // hierarchy can itself abort an XCTest snapshot. Once a label exists, use its
+        // frame directly; Settings rows with frame-less descendants fall back to a cell.
+        let element = find(label, in: app)
+        guard element.waitForExistence(timeout: timeout) else { return false }
 
-        repeat {
-            for element in candidates where element.exists {
-                let frame = element.frame
-                guard !frame.isNull, !frame.isEmpty, frame.width > 0, frame.height > 0 else { continue }
-                element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
-                return true
-            }
-            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
-        } while Date() < deadline
+        if hasFrame(element) {
+            tapCenter(element)
+            return true
+        }
 
-        return false
+        let row = app.cells.containing(.staticText, identifier: label).firstMatch
+        guard row.exists, hasFrame(row) else { return false }
+        tapCenter(row)
+        return true
     }
 
     private func find(_ label: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@ OR identifier == %@", label, label))
             .firstMatch
+    }
+
+    private func hasFrame(_ element: XCUIElement) -> Bool {
+        let frame = element.frame
+        return !frame.isNull && !frame.isEmpty && frame.width > 0 && frame.height > 0
+    }
+
+    private func tapCenter(_ element: XCUIElement) {
+        element.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
     }
 
     private func isOff(_ toggle: XCUIElement) -> Bool {
