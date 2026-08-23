@@ -1,4 +1,4 @@
-import { READING_SCHEMES } from "./reading-targets.js";
+import { READING_SCHEMES, recommendFromDibelsMaze } from "./reading-targets.js";
 
 const enabled = document.querySelector("#enabled");
 const apiKey = document.querySelector("#api-key");
@@ -7,7 +7,12 @@ const removeKey = document.querySelector("#remove-key");
 const keyStatus = document.querySelector("#key-status");
 const scheme = document.querySelector("#scheme");
 const level = document.querySelector("#level");
+const levelLabel = document.querySelector("#level-label");
 const schemeNote = document.querySelector("#scheme-note");
+const dibelsFields = document.querySelector("#dibels-fields");
+const dibelsPeriod = document.querySelector("#dibels-period");
+const dibelsScore = document.querySelector("#dibels-score");
+const dibelsRecommendation = document.querySelector("#dibels-recommendation");
 
 bindEvents();
 const ready = loadSettings();
@@ -17,9 +22,13 @@ function bindEvents() {
   scheme.addEventListener("change", async () => {
     await ready;
     populateLevels(scheme.value);
+    renderAssessmentFields();
     await updateSettings({ scheme: scheme.value, level: level.value });
+    renderRecommendation();
   });
-  level.addEventListener("change", async () => { await ready; await updateSettings({ scheme: scheme.value, level: level.value }); });
+  level.addEventListener("change", async () => { await ready; await updateSettings({ scheme: scheme.value, level: level.value }); renderRecommendation(); });
+  dibelsPeriod.addEventListener("change", async () => { await ready; await updateSettings({ dibelsPeriod: dibelsPeriod.value }); renderRecommendation(); });
+  dibelsScore.addEventListener("change", async () => { await ready; await updateSettings({ dibelsMazeScore: dibelsScore.value }); renderRecommendation(); });
   saveKey.addEventListener("click", () => void saveApiKey());
   apiKey.addEventListener("keydown", (event) => { if (event.key === "Enter") void saveApiKey(); });
   removeKey.addEventListener("click", () => void removeApiKey());
@@ -62,6 +71,10 @@ function renderSettings(settings) {
   enabled.checked = settings.enabled;
   scheme.value = settings.scheme;
   populateLevels(settings.scheme, settings.level);
+  dibelsPeriod.value = settings.dibelsPeriod ?? "middle";
+  dibelsScore.value = settings.dibelsMazeScore ?? "";
+  renderAssessmentFields();
+  renderRecommendation();
   renderKeyState(settings.hasApiKey);
   setStatus(settings.hasApiKey ? "API key saved." : "No API key saved.");
 }
@@ -73,11 +86,31 @@ function populateLevels(schemeId, selectedLevel) {
     option.value = value;
     if (schemeId === "oxford") option.textContent = `Oxford Level ${value}`;
     else if (schemeId === "fountasPinnell") option.textContent = `F&P Level ${value}`;
-    else option.textContent = `DIBELS Grade ${value}`;
+    else option.textContent = `Grade ${value}`;
     option.selected = value === selectedLevel;
     return option;
   }));
   schemeNote.textContent = definition.disclaimer;
+}
+
+function renderAssessmentFields() {
+  const isDibels = scheme.value === "dibelsMaze";
+  dibelsFields.hidden = !isDibels;
+  levelLabel.textContent = isDibels ? "Grade" : "Level";
+}
+
+function renderRecommendation() {
+  if (scheme.value !== "dibelsMaze") { dibelsRecommendation.textContent = ""; return; }
+  if (dibelsScore.value === "") {
+    dibelsRecommendation.textContent = "Enter the pupil’s Maze score to calculate a Plainly recommendation.";
+    return;
+  }
+  try {
+    const result = recommendFromDibelsMaze(level.value, dibelsPeriod.value, dibelsScore.value);
+    dibelsRecommendation.textContent = `${result.support}. Plainly suggests an approximate Grade ${result.accessGrade} access target · Lexile ${result.crosswalk.lexile} · F&P ${result.crosswalk.fountasPinnell} · Oxford ${result.crosswalk.oxford}. Teacher override is always available.`;
+  } catch {
+    dibelsRecommendation.textContent = "Enter a valid Maze score.";
+  }
 }
 
 function renderKeyState(hasApiKey) { removeKey.hidden = !hasApiKey; apiKey.placeholder = hasApiKey ? "Replace saved key…" : "sk-…"; }
