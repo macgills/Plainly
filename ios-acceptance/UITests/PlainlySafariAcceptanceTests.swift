@@ -33,19 +33,30 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         openWikipedia()
         allowWebsiteAccessIfPrompted()
 
-        let adjustedIndicator = findContaining(["Plainly", "Oxford 8"], in: safari)
+        let outcomeIndicator = safari.descendants(matching: .any)
+            .matching(NSPredicate(
+                format: "label CONTAINS %@ AND (label CONTAINS %@ OR label CONTAINS %@)",
+                "Plainly",
+                "Oxford 8",
+                "Couldn",
+            ))
+            .firstMatch
         XCTAssertTrue(
-            adjustedIndicator.waitForExistence(timeout: 75),
-            "Plainly never exposed its adjusted-state indicator in normal iPad Safari",
+            outcomeIndicator.waitForExistence(timeout: 75),
+            "Plainly never exposed an adjusted or error state in normal iPad Safari",
+        )
+        XCTAssertTrue(
+            outcomeIndicator.label.contains("Oxford 8"),
+            "Plainly entered its Couldn't-adjust state instead of transforming the article",
         )
 
-        adjustedIndicator.tap()
+        outcomeIndicator.tap()
         XCTAssertTrue(
             find("Plainly · Original", in: safari).waitForExistence(timeout: 5),
             "Plainly indicator could not restore the source text",
         )
         XCTAssertTrue(tap("Plainly · Original", in: safari, timeout: 5))
-        XCTAssertTrue(adjustedIndicator.waitForExistence(timeout: 5))
+        XCTAssertTrue(outcomeIndicator.waitForExistence(timeout: 5))
 
         keep(XCUIScreen.main.screenshot(), name: "plainly-adjusted-wikipedia")
     }
@@ -85,12 +96,22 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     }
 
     private func grantWebsiteAccessIfPresent() {
-        for site in ["All Websites", "en.wikipedia.org", "Wikipedia"] {
-            guard tap(site, in: settings, timeout: 1) else { continue }
-            if tap("Allow", in: settings, timeout: 2) || tap("Always Allow", in: settings, timeout: 2) {
-                return
-            }
+        // Safari treats MV3 host permissions as user-controlled website access. Plainly
+        // needs both the page host for its content script and api.openai.com for the
+        // background fetch. Granting only Wikipedia lets the UI run but blocks adjustment.
+        if grantWebsiteAccess("All Websites") {
+            return
         }
+
+        for site in ["en.wikipedia.org", "api.openai.com"] {
+            _ = grantWebsiteAccess(site)
+        }
+    }
+
+    private func grantWebsiteAccess(_ site: String) -> Bool {
+        guard tap(site, in: settings, timeout: 1) else { return false }
+        return tap("Allow", in: settings, timeout: 2)
+            || tap("Always Allow", in: settings, timeout: 2)
     }
 
     private func openWikipedia() {
@@ -168,13 +189,6 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
     private func find(_ label: String, in app: XCUIApplication) -> XCUIElement {
         app.descendants(matching: .any)
             .matching(NSPredicate(format: "label == %@ OR identifier == %@", label, label))
-            .firstMatch
-    }
-
-    private func findContaining(_ fragments: [String], in app: XCUIApplication) -> XCUIElement {
-        let predicates = fragments.map { NSPredicate(format: "label CONTAINS %@", $0) }
-        return app.descendants(matching: .any)
-            .matching(NSCompoundPredicate(andPredicateWithSubpredicates: predicates))
             .firstMatch
     }
 
