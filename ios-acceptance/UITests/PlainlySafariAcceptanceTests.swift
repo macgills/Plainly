@@ -10,13 +10,14 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         continueAfterFailure = false
     }
 
-    override func tearDown() {
+    @MainActor
+    override func tearDown() async throws {
         if testRun?.hasSucceeded == false {
             keep(XCUIScreen.main.screenshot(), name: "failure")
             keep(settings.debugDescription, name: "settings-accessibility")
             keep(safari.debugDescription, name: "safari-accessibility")
         }
-        super.tearDown()
+        try await super.tearDown()
     }
 
     func testPlainlyTransformsWikipediaInNormalIPadSafari() throws {
