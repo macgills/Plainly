@@ -41,11 +41,15 @@
   async function transformBatch(blocks, settings) {
     if (blocks.length === 0) return true;
     try {
+      const assessment = settings.scheme === "dibelsMaze" && settings.dibelsMazeScore !== ""
+        ? { period: settings.dibelsPeriod, score: settings.dibelsMazeScore }
+        : null;
       const response = await chrome.runtime.sendMessage({
         type: "PLAINLY_SIMPLIFY",
         payload: {
           scheme: settings.scheme,
           level: settings.level,
+          assessment,
           url: location.href,
           title: document.querySelector("#firstHeading")?.textContent?.trim() ?? document.title,
           blocks: blocks.map(({ id, text }) => ({ id, text })),
@@ -69,7 +73,7 @@
   function targetLabel(settings) {
     if (settings.scheme === "oxford") return `Oxford ${settings.level}`;
     if (settings.scheme === "fountasPinnell") return `F&P ${settings.level}`;
-    if (settings.scheme === "dibels8") return `DIBELS Grade ${settings.level}`;
+    if (settings.scheme === "dibelsMaze") return `DIBELS Maze · Grade ${settings.level}`;
     return String(settings.level);
   }
 
