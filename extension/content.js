@@ -129,7 +129,7 @@
 
         if (firstBatch && !allReady) {
           revealUnfinishedBlocks(blocks);
-          markIndicatorUnavailable(indicator);
+          markIndicatorUnavailable(indicator, "The adjusted response did not pass Plainly's fidelity checks.");
           return;
         }
       } catch (error) {
@@ -144,7 +144,7 @@
 
         if (firstBatch) {
           revealUnfinishedBlocks(blocks);
-          markIndicatorUnavailable(indicator);
+          markIndicatorUnavailable(indicator, reason);
           return;
         }
       }
@@ -259,9 +259,11 @@
     return indicator;
   }
 
-  function markIndicatorUnavailable(indicator) {
+  function markIndicatorUnavailable(indicator, reason) {
+    const detail = typeof reason === "string" && reason.trim() ? reason.trim() : "Unknown adjustment error.";
     indicator.textContent = "Plainly · Couldn’t adjust";
-    indicator.title = "Open Plainly and check your API key";
+    indicator.setAttribute("aria-label", `Plainly · Couldn’t adjust · ${detail}`);
+    indicator.title = detail;
     indicator.disabled = true;
   }
 })();
