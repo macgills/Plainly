@@ -1,30 +1,52 @@
 # Plainly
 
-**Browse Wikipedia at your reading level.**
+**Browse Wikipedia at a reading target that suits the reader.**
 
-Plainly is an early Chrome-extension prototype that automatically adjusts Wikipedia prose to a persistent reading level. The page stays recognisably Wikipedia: Plainly changes the prose, not the browsing experience.
+Plainly is an early browser-extension prototype that adjusts Wikipedia prose while keeping the page recognisably Wikipedia. It changes the language, not the browsing experience, and keeps the source text available as the authority.
+
+## Reading targets
+
+Plainly's reading-target policy lives in the Kotlin Multiplatform core and is shared by Chrome, Safari and native consumers.
+
+- **Oxford Reading Tree** — levels 1, 1+, and 2–20
+- **Fountas & Pinnell** — levels A–Z
+- **DIBELS 8 Maze** — Grade 2–8 plus benchmark period and an optional Maze score
+
+The default target is **Oxford 8**.
+
+DIBELS Maze is a comprehension assessment, not a text-leveling scheme. When a score is entered, Plainly classifies it against the selected DIBELS 8 grade/benchmark-period cut points and derives a conservative language-access target. The displayed Lexile, F&P and Oxford ranges are approximate Plainly crosswalks, not official conversions or certifications.
 
 ## Prototype scope
 
 - Chrome / Chromium, Manifest V3
+- Safari Web Extension packaging for iPad
 - English Wikipedia only
-- Persistent Levels 1–3
+- Persistent reading target
 - Automatic adjustment on navigation
-- Original prose is hidden while the adjusted version is loading, so difficult text does not flash first
+- Original prose is hidden while the first adjusted paragraph is pending, so difficult text does not flash first
+- Progressive adjustment after the first useful paragraph
 - Bring-your-own OpenAI API key, entered directly in the extension
 - No local server required
 
-## Try it
+## Try it in Chrome
 
-1. Clone this repository and check out the prototype branch.
+1. Build the KMP browser bundle:
+
+   ```bash
+   gradle -p core jsBrowserProductionWebpack
+   mkdir -p extension/generated
+   cp core/build/kotlin-webpack/js/productionExecutable/plainly-core.js extension/generated/plainly-core.js
+   ```
+
 2. Open `chrome://extensions`.
 3. Enable **Developer mode**.
 4. Choose **Load unpacked** and select the `extension/` directory.
 5. Open the Plainly toolbar popup.
 6. Paste an OpenAI API key and choose **Save**.
-7. Open or reload an English Wikipedia article.
+7. Choose a reading scheme and target.
+8. Open or reload an English Wikipedia article.
 
-Plainly defaults to **on, Level 2**. The selected level and API key persist in the local Chrome profile. The extension sends article text directly to the OpenAI Responses API and never puts the API key into the Wikipedia content script.
+The selected target and API key persist in the local browser profile. The extension sends article text directly to the OpenAI Responses API and never puts the API key into the Wikipedia content script.
 
 ### Prototype key safety
 
@@ -32,81 +54,86 @@ The API key is stored in `chrome.storage.local`. Plainly restricts that storage 
 
 This is still a prototype BYOK design, not a production secret-management strategy. Use a dedicated project key with a sensible spend limit; do not put a shared school or organisation-wide secret into a distributed extension.
 
-## Tests
-
-Install the test dependency and run:
-
-```bash
-npm install
-npm test
-```
-
-The deterministic integration suite launches Playwright's Chromium with the actual Manifest V3 extension loaded. It verifies:
-
-- original Wikipedia prose stays hidden while the first simplification response is pending
-- adjusted prose is revealed in place
-- no API key means Wikipedia remains immediately readable
-- adjusted mode and reading level persist across navigation
-- simplification failure restores the original prose instead of leaving content blocked
-- popup key save/remove and reading-level persistence work through real extension storage
-
-A fast Node integration test separately exercises the production OpenAI HTTP contract against a fake Responses endpoint, including bearer authentication and strict structured-output mapping. Deterministic tests never call the real OpenAI API or require a real key.
-
-### Prototype preview artifact
-
-Every green deterministic CI run also publishes a `plainly-prototype-preview-*` artifact. It contains the real extension UI and browser DOM path with deterministic simplification output, clearly labelled as a prototype preview rather than a live model response:
-
-- `plainly-popup.png` — extension setup UI
-- `plainly-wikipedia-preview.png` — Wikipedia after Plainly adjustment
-- `plainly-before-after-preview.png` — shareable before/after image
-- `plainly-before-after-preview.html` — standalone before/after page
-- the unpacked production `extension/` directory
-
-### Live OpenAI integration and demo artifacts
-
-GitHub Actions also runs a non-blocking live end-to-end check when the repository secret `AI_SECRET` is available. It first probes the production OpenAI adapter so credential, quota, model, or schema problems fail quickly before Chromium is downloaded. When that probe succeeds, the live test:
-
-1. launches Chromium with the shipped extension;
-2. enters `AI_SECRET` through the real popup UI;
-3. opens a Wikipedia fixture on the real Wikipedia origin;
-4. allows the extension service worker to call the real OpenAI Responses API;
-5. verifies the adjusted prose is written back into the page; and
-6. publishes a `plainly-live-demo-*` workflow artifact.
-
-The live artifact contains:
-
-- `plainly-live-wikipedia.png` — the transformed Wikipedia view
-- `plainly-before-after.png` — a shareable side-by-side comparison
-- `plainly-before-after.html` — a standalone comparison page
-- `plainly-live-result.json` — sanitized transformed text and latency metadata
-- the unpacked `extension/` directory so the build can be tried manually
-
-The live workflow intentionally disables Playwright traces and does not save the browser profile. The API key and request headers are not included in the artifact. Live API availability does not gate deterministic PR CI.
-
-Run the same live test locally with:
-
-```bash
-AI_SECRET="..." npm run test:live:api
-AI_SECRET="..." npm run test:live
-```
-
 ## Architecture
 
 ```text
 Wikipedia page
     ↓ content script @ document_start
-hide candidate prose + request public settings
-    ↓ runtime message (no API key exposed)
+hide candidate prose + resolve target through PlainlyCoreJs
+    ↓ stable KMP block identities + runtime message
 Manifest V3 service worker
     ↓ reads user key from trusted extension storage
 OpenAI Responses API
     ↓
-adjusted blocks replace source prose progressively
+KMP session reconciles + fidelity-checks adjusted blocks
+    ↓
+adjusted prose replaces source prose progressively
 ```
+
+The reusable `core/` module contains no browser APIs, DOM selectors, Wikipedia knowledge, provider code, API keys or UI. It owns:
+
+- Oxford/F&P/DIBELS target definitions and validation
+- DIBELS Maze benchmark classification and Plainly access recommendations
+- target-specific model guidance
+- source normalization and stable block identities
+- viewport-first batching and response reconciliation
+- provider-independent fidelity checks
+- adjustment state/events
+
+The Chrome and Safari extension layers remain thin adapters for DOM access, storage and provider transport.
+
+## Tests
+
+The main CI path builds the production KMP browser bundle, then uses that exact artifact in the browser tests and Safari package.
+
+```bash
+gradle -p core jvmTest jsNodeTest compileCommonMainKotlinMetadata jsBrowserProductionWebpack
+npm install
+npm test
+```
+
+Coverage includes:
+
+- complete Oxford, F&P and DIBELS target ranges
+- DIBELS benchmark boundaries and access recommendations
+- stable block identity and duplicate source addressing
+- numeric-fact preservation/rejection
+- viewport-first progressive batching
+- provider failure and missing-response handling
+- KMP target data crossing the browser/OpenAI boundary
+- no flash of original-complexity prose
+- Oxford/F&P target persistence across navigation
+- DIBELS recommendation display and persistence
+- fail-open/no-key behavior
+- popup API-key storage behavior
+- Safari-compatible extension assembly
+
+### Preview and live evaluation
+
+Every green deterministic CI run publishes a `plainly-prototype-preview-*` artifact containing screenshots and the assembled extension.
+
+The non-blocking live OpenAI job uses KMP-resolved reading targets for both the shipped-extension test and the teacher evaluation pack. The evaluation currently samples **Oxford 8**, **F&P M**, and **DIBELS Grade 4 / middle-of-year / Maze 14**, recording mechanical fidelity warnings for teacher review rather than treating model fluency as correctness.
+
+Live artifacts contain transformed text, screenshots and latency metadata but no API key, browser profile, traces or request headers.
+
+Run the live paths locally after building/copying `extension/generated/plainly-core.js`:
+
+```bash
+AI_SECRET="..." npm run test:live:api
+AI_SECRET="..." npm run test:live
+AI_SECRET="..." npm run eval:live
+```
+
+## Safari / iPad
+
+CI packages the same extension sources as a Safari Web Extension, links the KMP iOS simulator framework, builds the host app, installs it on an iPad simulator and launches it. The final Safari-in-browser interaction still needs a signed real-device acceptance pass because extension enablement and website permissions cannot be fully automated in Safari.
+
+See [`docs/ipad-acceptance.md`](docs/ipad-acceptance.md).
 
 ## Current prototype compromises
 
 - Adjusted paragraphs currently replace inline links/citations inside that paragraph. Preserving semantic inline anchors while rewriting text is the next important DOM problem.
 - Direct user-key storage is intentionally a prototype convenience; a managed school deployment should move credentials behind a service.
-- There are no accounts, analytics, automatic level assessment, arbitrary-site support, or school deployment features.
+- DIBELS-to-language-target and cross-scheme mappings are explicit product approximations, not official conversions.
+- There are no accounts, analytics, automatic reading assessment, arbitrary-site support, or school deployment features.
 - Failure restores visibility of the original paragraph rather than blocking access to the source.
