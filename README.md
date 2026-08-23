@@ -14,6 +14,8 @@ Plainly currently supports three teacher-facing target systems:
 
 These are transformation targets, not official certifications of a webpage or reader. In particular, DIBELS is an assessment and benchmark system rather than a text-leveling scheme, so Plainly uses the selected DIBELS grade to guide language accessibility; it does not convert a DIBELS composite score directly into a certified text level.
 
+A later score-assisted mode can accept a pupil's DIBELS grade, benchmark period and score and recommend a Plainly target. That recommendation should remain distinct from the official DIBELS benchmark/support classification.
+
 ## Prototype scope
 
 - Chrome / Chromium, Manifest V3
