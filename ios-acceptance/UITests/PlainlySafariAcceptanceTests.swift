@@ -47,7 +47,7 @@ final class PlainlySafariAcceptanceTests: XCTestCase {
         )
         XCTAssertTrue(
             outcomeIndicator.label.contains("Oxford 8"),
-            "Plainly entered its Couldn't-adjust state instead of transforming the article",
+            "Plainly failed in normal iPad Safari: \(outcomeIndicator.label)",
         )
 
         outcomeIndicator.tap()
