@@ -1,0 +1,43 @@
+name: PlainlySafariAcceptance
+options:
+  bundleIdPrefix: dev.plainly.acceptance
+settings:
+  base:
+    SWIFT_VERSION: 6.0
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+
+targets:
+  AcceptanceHost:
+    type: application
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - Host
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.plainly.acceptance.host
+        GENERATE_INFOPLIST_FILE: YES
+
+  PlainlySafariUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    deploymentTarget: "18.0"
+    sources:
+      - UITests
+    dependencies:
+      - target: AcceptanceHost
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.plainly.acceptance.uitests
+        GENERATE_INFOPLIST_FILE: YES
+
+schemes:
+  PlainlySafariAcceptance:
+    build:
+      targets:
+        AcceptanceHost: all
+        PlainlySafariUITests: [test]
+    test:
+      targets:
+        - PlainlySafariUITests

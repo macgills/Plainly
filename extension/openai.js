@@ -1,11 +1,7 @@
 export const DEFAULT_OPENAI_API_URL = "https://api.openai.com/v1/responses";
 export const DEFAULT_MODEL = "gpt-5-mini";
-
-const LEVEL_GUIDANCE = Object.freeze({
-  1: "Use very common words, short sentences, one main idea per sentence, and explain essential subject words in simple language.",
-  2: "Use common vocabulary and mostly short sentences. Keep essential subject vocabulary, but explain unfamiliar terms in context.",
-  3: "Use clear secondary-school language. Reduce sentence complexity while preserving important domain terminology and nuance.",
-});
+export const DEFAULT_REASONING_EFFORT = "minimal";
+export const DEFAULT_VERBOSITY = "low";
 
 export async function simplifyWithOpenAI({
   apiKey,
@@ -26,17 +22,18 @@ export async function simplifyWithOpenAI({
     body: JSON.stringify({
       model,
       store: false,
+      reasoning: { effort: DEFAULT_REASONING_EFFORT },
       input: [
         {
           role: "system",
           content: [{
             type: "input_text",
             text: [
-              "You adjust Wikipedia prose to a specified reading level.",
+              "You adjust informational web prose to a specified reading target.",
               "Use only information present in the supplied source text.",
-              "Do not add facts, examples, explanations, causes, or conclusions from your own knowledge.",
+              "Do not add facts, definitions, examples, explanations, causes, or conclusions from your own knowledge.",
               "Preserve names, dates, numbers, uncertainty, comparisons, negation, and the meaning of technical terms.",
-              "Simplify syntax and vocabulary without removing information needed to understand the source.",
+              "Preserve the source's factual precision and conceptual rigor even when making language easier to process.",
               "Return one adjusted string for every supplied block id.",
             ].join(" "),
           }],
@@ -47,14 +44,14 @@ export async function simplifyWithOpenAI({
             type: "input_text",
             text: JSON.stringify({
               title: payload.title ?? "",
-              level: payload.level,
-              guidance: LEVEL_GUIDANCE[payload.level],
+              readingTarget: payload.readingTarget,
               blocks: payload.blocks,
             }),
           }],
         },
       ],
       text: {
+        verbosity: DEFAULT_VERBOSITY,
         format: {
           type: "json_schema",
           name: "plainly_adjusted_blocks",
@@ -121,11 +118,17 @@ function validateApiKey(apiKey) {
 }
 
 function validatePayload(payload) {
-  if (![1, 2, 3].includes(payload?.level)) throw new Error("level must be 1, 2, or 3");
+  const target = payload?.readingTarget;
+  if (!target) throw new Error("readingTarget is required");
+  for (const key of ["schemeId", "scheme", "level", "guidance", "qualification"]) {
+    if (typeof target[key] !== "string" || target[key].trim().length === 0) {
+      throw new Error(`readingTarget.${key} must be a non-empty string`);
+    }
+  }
+
   if (!Array.isArray(payload?.blocks) || payload.blocks.length === 0 || payload.blocks.length > 8) {
     throw new Error("blocks must contain between 1 and 8 items");
   }
-
   for (const block of payload.blocks) {
     if (typeof block?.id !== "string" || typeof block?.text !== "string" || block.text.trim().length === 0) {
       throw new Error("each block must contain a non-empty id and text");

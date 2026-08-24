@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Plainly",
-  "version": "0.2.0",
-  "description": "Browse Wikipedia at an adjusted reading level.",
+  "version": "0.4.0",
+  "description": "Browse Wikipedia at an adjusted reading target.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://en.wikipedia.org/*",
@@ -20,7 +20,7 @@
     {
       "matches": ["https://en.wikipedia.org/wiki/*"],
       "css": ["content.css"],
-      "js": ["content.js"],
+      "js": ["generated/plainly-core.js", "content.js"],
       "run_at": "document_start"
     }
   ]

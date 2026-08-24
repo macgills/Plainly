@@ -1,112 +1,210 @@
 # Plainly
 
-**Browse Wikipedia at your reading level.**
+**Browse Wikipedia at a reading target that suits the reader.**
 
-Plainly is an early Chrome-extension prototype that automatically adjusts Wikipedia prose to a persistent reading level. The page stays recognisably Wikipedia: Plainly changes the prose, not the browsing experience.
+Plainly is an early browser-extension prototype that adjusts English Wikipedia prose while keeping the original text available. It supports **Oxford Reading Tree**, **Fountas & Pinnell**, and **DIBELS 8 Maze** targets. The default is **Oxford 8**.
 
-## Prototype scope
+You do not need to be a developer to try it locally. The sections below are deliberately written as copy/paste instructions.
 
-- Chrome / Chromium, Manifest V3
-- English Wikipedia only
-- Persistent Levels 1–3
-- Automatic adjustment on navigation
-- Original prose is hidden while the adjusted version is loading, so difficult text does not flash first
-- Bring-your-own OpenAI API key, entered directly in the extension
-- No local server required
+## What you need
 
-## Try it
+### For Chrome or Chromium
 
-1. Clone this repository and check out the prototype branch.
-2. Open `chrome://extensions`.
-3. Enable **Developer mode**.
-4. Choose **Load unpacked** and select the `extension/` directory.
-5. Open the Plainly toolbar popup.
-6. Paste an OpenAI API key and choose **Save**.
-7. Open or reload an English Wikipedia article.
+You need a Windows, macOS, or Linux computer with:
 
-Plainly defaults to **on, Level 2**. The selected level and API key persist in the local Chrome profile. The extension sends article text directly to the OpenAI Responses API and never puts the API key into the Wikipedia content script.
+- **Git** — https://git-scm.com/downloads
+- **Node.js 20 or newer** — https://nodejs.org/
+- **Java 17 or newer** — https://adoptium.net/
+- **Gradle 9.5 or newer** — https://gradle.org/install/
+- **Google Chrome** or another Chromium browser
 
-### Prototype key safety
+After installing them, open Terminal on macOS/Linux or PowerShell on Windows and check:
 
-The API key is stored in `chrome.storage.local`. Plainly restricts that storage to trusted extension contexts so the Wikipedia content script cannot read it, and the popup never displays a saved key back to the user.
-
-This is still a prototype BYOK design, not a production secret-management strategy. Use a dedicated project key with a sensible spend limit; do not put a shared school or organisation-wide secret into a distributed extension.
-
-## Tests
-
-Install the test dependency and run:
-
-```bash
-npm install
-npm test
+```text
+git --version
+node --version
+java -version
+gradle --version
 ```
 
-The deterministic integration suite launches Playwright's Chromium with the actual Manifest V3 extension loaded. It verifies:
+If each command prints a version number, you are ready.
 
-- original Wikipedia prose stays hidden while the first simplification response is pending
-- adjusted prose is revealed in place
-- no API key means Wikipedia remains immediately readable
-- adjusted mode and reading level persist across navigation
-- simplification failure restores the original prose instead of leaving content blocked
-- popup key save/remove and reading-level persistence work through real extension storage
+### For the iPad simulator
 
-A fast Node integration test separately exercises the production OpenAI HTTP contract against a fake Responses endpoint, including bearer authentication and strict structured-output mapping. Deterministic tests never call the real OpenAI API or require a real key.
+You need an **Apple Silicon Mac** with all of the above plus:
 
-### Prototype preview artifact
+- **Xcode** from the Mac App Store
+- an iOS Simulator runtime installed in **Xcode → Settings → Components**
+- **Homebrew** — https://brew.sh/
 
-Every green deterministic CI run also publishes a `plainly-prototype-preview-*` artifact. It contains the real extension UI and browser DOM path with deterministic simplification output, clearly labelled as a prototype preview rather than a live model response:
+The local iPad command uses the same automated Safari test that runs in CI. It builds Plainly, installs it in an iPad simulator, enables the Safari extension, grants its website permissions, enters your API key, opens Wikipedia, and proves that adjusted text appears.
 
-- `plainly-popup.png` — extension setup UI
-- `plainly-wikipedia-preview.png` — Wikipedia after Plainly adjustment
-- `plainly-before-after-preview.png` — shareable before/after image
-- `plainly-before-after-preview.html` — standalone before/after page
-- the unpacked production `extension/` directory
+## 1. Download Plainly
 
-### Live OpenAI integration and demo artifacts
-
-GitHub Actions also runs a non-blocking live end-to-end check when the repository secret `AI_SECRET` is available. It first probes the production OpenAI adapter so credential, quota, model, or schema problems fail quickly before Chromium is downloaded. When that probe succeeds, the live test:
-
-1. launches Chromium with the shipped extension;
-2. enters `AI_SECRET` through the real popup UI;
-3. opens a Wikipedia fixture on the real Wikipedia origin;
-4. allows the extension service worker to call the real OpenAI Responses API;
-5. verifies the adjusted prose is written back into the page; and
-6. publishes a `plainly-live-demo-*` workflow artifact.
-
-The live artifact contains:
-
-- `plainly-live-wikipedia.png` — the transformed Wikipedia view
-- `plainly-before-after.png` — a shareable side-by-side comparison
-- `plainly-before-after.html` — a standalone comparison page
-- `plainly-live-result.json` — sanitized transformed text and latency metadata
-- the unpacked `extension/` directory so the build can be tried manually
-
-The live workflow intentionally disables Playwright traces and does not save the browser profile. The API key and request headers are not included in the artifact. Live API availability does not gate deterministic PR CI.
-
-Run the same live test locally with:
+Open Terminal or PowerShell and run:
 
 ```bash
-AI_SECRET="..." npm run test:live:api
-AI_SECRET="..." npm run test:live
+git clone --branch agent/kmp-extension-core https://github.com/macgills/Plainly.git
+cd Plainly
 ```
+
+Everything below should be run from that `Plainly` folder.
+
+## 2. Try Plainly in Chrome
+
+Build the extension:
+
+```bash
+npm run build
+```
+
+When it finishes, it should say:
+
+```text
+Plainly browser extension built in extension/
+```
+
+Then:
+
+1. Open Chrome.
+2. Enter `chrome://extensions` in the address bar.
+3. Turn on **Developer mode** in the top-right corner.
+4. Choose **Load unpacked**.
+5. Select the `extension` folder inside the Plainly folder you downloaded.
+6. Pin/open the **Plainly** extension from Chrome's extensions menu.
+7. Paste an OpenAI API key and choose **Save**.
+8. Choose a reading scheme and target.
+9. Open or reload any article on **en.wikipedia.org**.
+
+Plainly should replace suitable article paragraphs with adjusted text. Use the **Plainly** button on the page to switch between the adjusted and original text.
+
+If you change the source code later, run `npm run build` again and press **Reload** on Plainly's card in `chrome://extensions`.
+
+## 3. Try Plainly on an iPad simulator
+
+This is the easiest Safari/iPad route because it is automated.
+
+First create an OpenAI API key. Then, from the Plainly folder on your Mac, run:
+
+```bash
+AI_SECRET="sk-your-key-here" npm run ipad
+```
+
+The first run can take a while because Xcode and Kotlin may download/build their toolchains. Plainly will:
+
+1. build the shared Kotlin code;
+2. package the Safari Web Extension;
+3. choose and boot an installed iPad simulator;
+4. build and install the Plainly iOS host app;
+5. enable Plainly in Safari Settings;
+6. grant access to Wikipedia and the OpenAI API;
+7. open normal iPad Safari;
+8. enter the supplied API key;
+9. open Wikipedia and verify that Plainly actually adjusts the page.
+
+If the command succeeds, it ends with:
+
+```text
+Plainly is installed and working in the iPad simulator.
+```
+
+The Simulator app is deliberately left open so you can continue trying Plainly yourself.
+
+## A physical iPad
+
+The automated `npm run ipad` command uses Apple's **iPad Simulator**, not physical hardware.
+
+For a physical iPad you also need Apple code signing. The Safari package generated by the project can be opened in Xcode, assigned to your Apple development team, built onto your connected iPad, and then enabled under the iPad's Safari extension settings. That final signing/deployment step depends on your Apple account and device and is therefore not hidden behind the simulator command.
+
+For the current detailed acceptance flow, see [`docs/ipad-acceptance.md`](docs/ipad-acceptance.md).
+
+## OpenAI API key safety
+
+Plainly is currently a bring-your-own-key prototype.
+
+The key is stored in the browser extension's local storage and is not exposed to the Wikipedia content script. The popup also does not display a saved key back to the user. Article text is sent directly from the extension to the OpenAI Responses API.
+
+For experiments, use a **dedicated project key with a sensible spend limit**. Do not distribute a shared school or organisation-wide key inside the extension. A managed deployment should put credentials behind a service instead.
+
+## Troubleshooting
+
+**`gradle: command not found`**  
+Install Gradle 9.5 or newer, close and reopen Terminal/PowerShell, then run `gradle --version` before trying again.
+
+**`java` or Gradle reports the wrong Java version**  
+Install Java 17 or newer and make sure `java -version` shows that installation.
+
+**Chrome says the extension cannot be loaded**  
+Run `npm run build` again and make sure you select the repository's `extension` folder, not the repository root.
+
+**Plainly appears but Wikipedia does not change**  
+Make sure an API key is saved, Plainly is enabled, you are on `https://en.wikipedia.org`, and reload the page once after changing settings.
+
+**`npm run ipad` says no iPad simulator is installed**  
+Open **Xcode → Settings → Components**, install an iOS simulator runtime, and retry.
+
+**`npm run ipad` cannot find Xcode tools**  
+Open Xcode once, accept its licence/setup prompts, then run:
+
+```bash
+sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+```
+
+**The iPad build fails while installing XcodeGen**  
+Check that Homebrew works by running `brew --version`, then retry. The script installs XcodeGen automatically when needed.
+
+## Reading targets
+
+Plainly's reading-target policy lives in the Kotlin Multiplatform core and is shared by Chrome, Safari and native consumers.
+
+- **Oxford Reading Tree** — levels 1, 1+, and 2–20
+- **Fountas & Pinnell** — levels A–Z
+- **DIBELS 8 Maze** — Grade 2–8 plus benchmark period and an optional Maze score
+
+DIBELS Maze is a comprehension assessment, not a text-leveling scheme. When a score is entered, Plainly classifies it against the selected DIBELS grade/benchmark-period cut points and derives a conservative language-access target. Displayed Lexile/F&P/Oxford ranges are approximate Plainly crosswalks, not official conversions or certifications.
 
 ## Architecture
 
 ```text
 Wikipedia page
-    ↓ content script @ document_start
-hide candidate prose + request public settings
-    ↓ runtime message (no API key exposed)
-Manifest V3 service worker
-    ↓ reads user key from trusted extension storage
+    ↓
+Plainly browser adapter
+    ↓
+Kotlin Multiplatform reading target + batching + fidelity checks
+    ↓
 OpenAI Responses API
     ↓
-adjusted blocks replace source prose progressively
+adjusted prose replaces source prose progressively
+```
+
+The reusable `core/` module contains no browser APIs, DOM selectors, Wikipedia knowledge, provider code, API keys or UI. Chrome and Safari are thin adapters around the same generated KMP browser bundle.
+
+## Tests
+
+For contributors who want the full local deterministic test suite:
+
+```bash
+npm install
+npm run build
+gradle -p core jvmTest jsNodeTest compileCommonMainKotlinMetadata
+npx playwright install chromium
+npm test
+```
+
+CI additionally builds the Safari host, installs it on an iPad simulator, and drives **normal iPad Safari** with XCUITest. It enables the extension, grants host permissions, configures the key, opens Wikipedia, waits for a real adjusted result, and toggles between original and adjusted text. This proves the simulator/Safari integration rather than merely proving that an iOS project compiles.
+
+The optional live paths are:
+
+```bash
+AI_SECRET="..." npm run test:live:api
+AI_SECRET="..." npm run test:live
+AI_SECRET="..." npm run eval:live
 ```
 
 ## Current prototype compromises
 
-- Adjusted paragraphs currently replace inline links/citations inside that paragraph. Preserving semantic inline anchors while rewriting text is the next important DOM problem.
+- Adjusted paragraphs currently replace inline links/citations inside that paragraph. Plainly excludes citation markers from the text sent for adjustment so they do not masquerade as factual numbers, but restoring semantic inline anchors in adjusted prose remains an important DOM problem.
 - Direct user-key storage is intentionally a prototype convenience; a managed school deployment should move credentials behind a service.
-- There are no accounts, analytics, automatic level assessment, arbitrary-site support, or school deployment features.
+- DIBELS-to-language-target and cross-scheme mappings are explicit product approximations, not official conversions.
+- There are no accounts, analytics, automatic reading assessment, arbitrary-site support, or school deployment features.
 - Failure restores visibility of the original paragraph rather than blocking access to the source.

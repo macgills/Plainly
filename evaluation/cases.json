@@ -1,0 +1,49 @@
+[
+  {
+    "id": "history-hastings",
+    "subject": "History",
+    "source": "In 1066, William the Conqueror defeated King Harold II at the Battle of Hastings. William then became king of England and began major changes to land ownership and government.",
+    "requiredTerms": ["1066", "William the Conqueror", "Harold II", "Battle of Hastings"],
+    "requiredAny": [],
+    "teacherFocus": "Check that the date, people, event and cause-and-effect all remain clear."
+  },
+  {
+    "id": "biology-mitochondria",
+    "subject": "Biology",
+    "source": "Mitochondria are structures inside most eukaryotic cells. They use oxygen and nutrients to help produce ATP, a molecule cells use to transfer energy for many activities.",
+    "requiredTerms": ["Mitochondria", "ATP"],
+    "requiredAny": [],
+    "teacherFocus": "The technical terms should remain, but the surrounding explanation should become easier to read."
+  },
+  {
+    "id": "science-sea-level",
+    "subject": "Earth science",
+    "source": "Scientists estimate that global sea level rose by about 20 centimetres between 1901 and 2018. The exact amount varies by location because land and ocean conditions differ.",
+    "requiredTerms": ["20", "1901", "2018"],
+    "requiredAny": [
+      ["estimate", "estimated"],
+      ["about", "around", "approximately", "roughly"],
+      ["varies", "vary", "different", "differs"]
+    ],
+    "teacherFocus": "Check that the estimate and uncertainty are preserved rather than stated as an exact universal measurement."
+  },
+  {
+    "id": "science-photosynthesis",
+    "subject": "Biology",
+    "source": "Photosynthesis allows plants, algae, and some bacteria to convert light energy into chemical energy. In most cases, the process also releases oxygen as a waste product.",
+    "requiredTerms": ["Photosynthesis", "oxygen"],
+    "requiredAny": [],
+    "teacherFocus": "Check that the relationship between light, chemical energy and oxygen is not changed."
+  },
+  {
+    "id": "geography-volcano",
+    "subject": "Geography",
+    "source": "A dormant volcano is not erupting now, but it may erupt again in the future. Scientists cannot predict the exact time of every volcanic eruption.",
+    "requiredTerms": ["dormant volcano"],
+    "requiredAny": [
+      ["may", "might", "could", "can"],
+      ["cannot", "can't", "unable", "not able"]
+    ],
+    "teacherFocus": "The possibility and uncertainty must remain; the rewrite must not imply that an eruption will definitely happen."
+  }
+]

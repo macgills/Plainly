@@ -1,4 +1,13 @@
 node_modules/
+build/
+core/build/
+extension/generated/
+artifacts/
+artifacts-preview/
+artifacts-safari/
+evaluation-artifacts/
+safari-generated/
+safari-derived/
 test-results/
 playwright-report/
 .DS_Store

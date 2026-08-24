@@ -14,6 +14,10 @@
     "style",
     "script",
   ].join(",");
+  const EXCLUDED_INLINE_CONTENT = [
+    "sup.reference",
+    ".mw-editsection",
+  ].join(",");
 
   document.documentElement.classList.add("plainly-pending");
   void bootstrap();
@@ -26,34 +30,155 @@
       return;
     }
 
-    document.documentElement.classList.add("plainly-enabled");
-    await waitForArticle();
-
-    const blocks = collectBlocks();
-    if (blocks.length === 0) {
+    const kmp = globalThis["plainly-extension-core"];
+    if (!kmp?.PlainlyCoreJs) {
+      console.warn("Plainly KMP core is unavailable; showing the original article.");
       leaveAdjustedMode();
       return;
     }
 
-    for (const block of blocks) {
-      block.element.dataset.plainlyState = "loading";
-      block.element.dataset.plainlyOriginal = block.text;
-    }
-
-    document.documentElement.classList.remove("plainly-pending");
-    const indicator = addIndicator(settings.level);
-
-    const [first, ...rest] = blocks;
-    const firstAdjusted = await transformBatch([first], settings.level);
-    if (!firstAdjusted) {
-      for (const block of rest) block.element.dataset.plainlyState = "error";
-      markIndicatorUnavailable(indicator);
+    let target;
+    try {
+      target = kmp.PlainlyCoreJs.resolveReadingTarget(
+        settings.scheme,
+        settings.level,
+        settings.dibelsPeriod ?? "",
+        settings.dibelsMazeScore ?? "",
+      );
+    } catch (error) {
+      console.warn("Plainly reading target is invalid; showing the original article.", error);
+      leaveAdjustedMode();
       return;
     }
 
-    for (let index = 0; index < rest.length; index += 4) {
-      await transformBatch(rest.slice(index, index + 4), settings.level);
+    document.documentElement.classList.add("plainly-enabled");
+    await waitForArticle();
+
+    const readableBlocks = collectReadableBlocks();
+    if (readableBlocks.length === 0) {
+      leaveAdjustedMode();
+      return;
     }
+
+    const title = document.querySelector("#firstHeading")?.textContent?.trim() ?? document.title;
+    let session;
+    try {
+      session = kmp.PlainlyCoreJs.createSession(
+        location.href,
+        title,
+        settings.scheme,
+        settings.level,
+        settings.dibelsPeriod ?? "",
+        settings.dibelsMazeScore ?? "",
+        readableBlocks.map((block) => block.sourceText),
+        1,
+        4,
+      );
+    } catch (error) {
+      console.warn("Plainly could not initialize its KMP core; showing the original article.", error);
+      leaveAdjustedMode();
+      return;
+    }
+
+    const sourceBlocks = [...session.sourceBlocks()];
+    if (sourceBlocks.length !== readableBlocks.length) {
+      console.warn("Plainly core returned a different block count; showing the original article.");
+      leaveAdjustedMode();
+      return;
+    }
+
+    const blocks = sourceBlocks.map((source, index) => ({
+      key: source.key,
+      text: source.text,
+      element: readableBlocks[index].element,
+      originalText: readableBlocks[index].originalText,
+    }));
+    const blocksByKey = new Map(blocks.map((block) => [block.key, block]));
+
+    for (const block of blocks) {
+      block.element.dataset.plainlyState = "loading";
+      block.element.dataset.plainlyOriginal = block.originalText;
+    }
+
+    document.documentElement.classList.remove("plainly-pending");
+    const indicator = addIndicator(target.label);
+    indicator.dataset.engine = "kmp";
+
+    let firstBatch = true;
+    while (!session.isComplete()) {
+      const requested = [...session.nextBatch()];
+      if (requested.length === 0) break;
+
+      const domBatch = requested
+        .map((source) => blocksByKey.get(source.key))
+        .filter(Boolean);
+
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "PLAINLY_SIMPLIFY",
+          payload: {
+            url: location.href,
+            title,
+            readingTarget: toPromptTarget(target),
+            blocks: requested.map(({ key, text }) => ({ id: key, text })),
+          },
+        });
+
+        if (!response?.ok) throw new Error(response?.error ?? "Plainly request failed");
+
+        const decisions = [...session.accept(
+          response.blocks.map((block) => block.id),
+          response.blocks.map((block) => block.text),
+        )];
+        const allReady = applyDecisions(decisions, blocksByKey);
+
+        if (firstBatch && !allReady) {
+          revealUnfinishedBlocks(blocks);
+          markIndicatorUnavailable(indicator, "The adjusted response did not pass Plainly's fidelity checks.");
+          return;
+        }
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error);
+        try {
+          session.fail(reason);
+        } catch {
+          // The core may already have reconciled the active batch. The DOM still fails open below.
+        }
+        console.warn("Plainly could not adjust a block; restoring original text.", error);
+        for (const block of domBatch) block.element.dataset.plainlyState = "error";
+
+        if (firstBatch) {
+          revealUnfinishedBlocks(blocks);
+          markIndicatorUnavailable(indicator, reason);
+          return;
+        }
+      }
+
+      firstBatch = false;
+    }
+  }
+
+  function toPromptTarget(target) {
+    const recommendation = target.recommendation;
+    return {
+      schemeId: target.schemeId,
+      scheme: target.schemeName,
+      level: target.level,
+      guidance: target.guidance,
+      qualification: target.disclaimer,
+      recommendation: recommendation ? {
+        band: recommendation.band,
+        benchmarkLabel: recommendation.benchmarkLabel,
+        support: recommendation.support,
+        assessedGrade: recommendation.assessedGrade,
+        accessGrade: recommendation.accessGrade,
+        approximateCrosswalk: {
+          lexile: recommendation.lexile,
+          fountasPinnell: recommendation.fountasPinnell,
+          oxford: recommendation.oxford,
+        },
+      } : null,
+    };
   }
 
   function leaveAdjustedMode() {
@@ -75,65 +200,60 @@
     });
   }
 
-  function collectBlocks() {
+  function collectReadableBlocks() {
     return [...document.querySelectorAll(BLOCK_SELECTOR)]
-      .filter(isReadableBlock)
-      .map((element, index) => ({
-        id: `block-${index}`,
+      .filter((element) => !element.closest(EXCLUDED_ANCESTORS))
+      .map((element) => ({
         element,
-        text: normalizeText(element.textContent ?? ""),
-      }));
+        originalText: element.textContent ?? "",
+        sourceText: extractReadableText(element),
+      }))
+      .filter((block) => block.sourceText.replace(/\s+/g, " ").trim().length >= 40);
   }
 
-  function isReadableBlock(element) {
-    if (element.closest(EXCLUDED_ANCESTORS)) return false;
-    const text = normalizeText(element.textContent ?? "");
-    return text.length >= 40;
+  function extractReadableText(element) {
+    const clone = element.cloneNode(true);
+    for (const excluded of clone.querySelectorAll(EXCLUDED_INLINE_CONTENT)) excluded.remove();
+    return clone.textContent ?? "";
   }
 
-  function normalizeText(text) {
-    return text.replace(/\s+/g, " ").trim();
-  }
-
-  async function transformBatch(blocks, level) {
-    if (blocks.length === 0) return true;
-
-    try {
-      const response = await chrome.runtime.sendMessage({
-        type: "PLAINLY_SIMPLIFY",
-        payload: {
-          level,
-          url: location.href,
-          title: document.querySelector("#firstHeading")?.textContent?.trim() ?? document.title,
-          blocks: blocks.map(({ id, text }) => ({ id, text })),
-        },
-      });
-
-      if (!response?.ok) throw new Error(response?.error ?? "Plainly request failed");
-
-      const byId = new Map(response.blocks.map((block) => [block.id, block.text]));
-      for (const block of blocks) {
-        const adjusted = byId.get(block.id);
-        if (!adjusted) throw new Error(`Missing adjusted text for ${block.id}`);
-        block.element.textContent = adjusted;
-        block.element.dataset.plainlyState = "ready";
+  function applyDecisions(decisions, blocksByKey) {
+    let allReady = true;
+    for (const decision of decisions) {
+      const block = blocksByKey.get(decision.key);
+      if (!block) {
+        allReady = false;
+        continue;
       }
-      return true;
-    } catch (error) {
-      console.warn("Plainly could not adjust a block; restoring original text.", error);
-      for (const block of blocks) block.element.dataset.plainlyState = "error";
-      return false;
+
+      if (decision.state === "ready" && decision.text) {
+        block.element.textContent = decision.text;
+        block.element.dataset.plainlyState = "ready";
+      } else {
+        allReady = false;
+        block.element.dataset.plainlyState = "error";
+        if (decision.reason) console.warn(`Plainly rejected ${decision.key}: ${decision.reason}`);
+      }
+    }
+    return allReady;
+  }
+
+  function revealUnfinishedBlocks(blocks) {
+    for (const block of blocks) {
+      if (block.element.dataset.plainlyState === "loading") {
+        block.element.dataset.plainlyState = "error";
+      }
     }
   }
 
-  function addIndicator(level) {
+  function addIndicator(label) {
     const existing = document.getElementById("plainly-indicator");
     if (existing) return existing;
 
     const indicator = document.createElement("button");
     indicator.id = "plainly-indicator";
     indicator.type = "button";
-    indicator.textContent = `Plainly · Level ${level}`;
+    indicator.textContent = `Plainly · ${label}`;
     indicator.title = "Show original text";
     indicator.addEventListener("click", () => {
       const showingOriginal = indicator.dataset.mode === "original";
@@ -147,16 +267,18 @@
         }
       }
       indicator.dataset.mode = showingOriginal ? "adjusted" : "original";
-      indicator.textContent = showingOriginal ? `Plainly · Level ${level}` : "Plainly · Original";
+      indicator.textContent = showingOriginal ? `Plainly · ${label}` : "Plainly · Original";
       indicator.title = showingOriginal ? "Show original text" : "Show adjusted text";
     });
     document.documentElement.append(indicator);
     return indicator;
   }
 
-  function markIndicatorUnavailable(indicator) {
+  function markIndicatorUnavailable(indicator, reason) {
+    const detail = typeof reason === "string" && reason.trim() ? reason.trim() : "Unknown adjustment error.";
     indicator.textContent = "Plainly · Couldn’t adjust";
-    indicator.title = "Open Plainly and check your API key";
+    indicator.setAttribute("aria-label", `Plainly · Couldn’t adjust · ${detail}`);
+    indicator.title = detail;
     indicator.disabled = true;
   }
 })();

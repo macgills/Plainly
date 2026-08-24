@@ -2,11 +2,23 @@ import assert from "node:assert/strict";
 import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
-import { simplifyWithOpenAI } from "../extension/openai.js";
+import {
+  DEFAULT_REASONING_EFFORT,
+  DEFAULT_VERBOSITY,
+  simplifyWithOpenAI,
+} from "../extension/openai.js";
 
 const TEST_KEY = "sk-test-plainly-integration-key";
+const READING_TARGET = Object.freeze({
+  schemeId: "oxford",
+  scheme: "Oxford Reading Tree",
+  level: "8",
+  guidance: "Use mostly short-to-medium sentences and clear paragraph structure.",
+  qualification: "Approximate language target, not an official webpage level.",
+  recommendation: null,
+});
 
-test("calls the OpenAI Responses API with the user key and maps structured blocks", async () => {
+test("calls the OpenAI Responses API with a KMP-resolved reading target", async () => {
   let receivedAuthorization;
   let receivedBody;
 
@@ -23,7 +35,7 @@ test("calls the OpenAI Responses API with the user key and maps structured block
         content: [{
           type: "output_text",
           text: JSON.stringify({
-            blocks: [{ id: "block-0", text: "Plants turn light into usable energy." }],
+            blocks: [{ id: "stable-key-0", text: "Plants turn light into usable energy." }],
           }),
         }],
       }],
@@ -41,9 +53,9 @@ test("calls the OpenAI Responses API with the user key and maps structured block
       model: "gpt-5-mini",
       payload: {
         title: "Photosynthesis",
-        level: 2,
+        readingTarget: READING_TARGET,
         blocks: [{
-          id: "block-0",
+          id: "stable-key-0",
           text: "Photosynthesis is a system of biological processes by which phototrophic organisms convert light energy into chemical energy.",
         }],
       },
@@ -52,9 +64,17 @@ test("calls the OpenAI Responses API with the user key and maps structured block
     assert.equal(receivedAuthorization, `Bearer ${TEST_KEY}`);
     assert.equal(receivedBody.model, "gpt-5-mini");
     assert.equal(receivedBody.store, false);
+    assert.equal(receivedBody.reasoning.effort, DEFAULT_REASONING_EFFORT);
+    assert.equal(receivedBody.text.verbosity, DEFAULT_VERBOSITY);
     assert.equal(receivedBody.text.format.type, "json_schema");
-    assert.match(receivedBody.input[1].content[0].text, /Photosynthesis/);
-    assert.deepEqual(result, [{ id: "block-0", text: "Plants turn light into usable energy." }]);
+    assert.match(receivedBody.input[0].content[0].text, /Do not add facts, definitions/);
+
+    const userInput = JSON.parse(receivedBody.input[1].content[0].text);
+    assert.equal(userInput.title, "Photosynthesis");
+    assert.equal(userInput.readingTarget.schemeId, "oxford");
+    assert.equal(userInput.readingTarget.level, "8");
+    assert.match(userInput.readingTarget.guidance, /short-to-medium/);
+    assert.deepEqual(result, [{ id: "stable-key-0", text: "Plants turn light into usable energy." }]);
   } finally {
     await new Promise((resolve) => server.close(resolve));
   }
