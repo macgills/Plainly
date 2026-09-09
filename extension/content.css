@@ -1,5 +1,11 @@
 html.plainly-pending #mw-content-text .mw-parser-output p,
-html.plainly-pending #mw-content-text .mw-parser-output li:not(.toclevel-1):not(.toclevel-2) {
+html.plainly-pending #mw-content-text .mw-parser-output li:not(.toclevel-1):not(.toclevel-2),
+html.plainly-pending article:has(h1) p,
+html.plainly-pending article:has(h1) li,
+html.plainly-pending [role="article"]:has(h1) p,
+html.plainly-pending [role="article"]:has(h1) li,
+html.plainly-pending [itemprop="articleBody"] p,
+html.plainly-pending [itemprop="articleBody"] li {
   visibility: hidden !important;
 }
 

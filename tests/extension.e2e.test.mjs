@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const sourceExtensionPath = path.resolve(here, "../extension");
 const wikipediaFixture = await readFile(path.join(here, "fixtures/wikipedia.html"), "utf8");
+const articleFixture = await readFile(path.join(here, "fixtures/article.html"), "utf8");
 const TEST_KEY = "sk-test-plainly-browser-integration-key";
 const SLOW_TEST_KEY = "sk-test-plainly-slow-browser-integration-key";
 const FAIL_TEST_KEY = "sk-test-plainly-fail-browser-integration-key";
@@ -26,7 +27,13 @@ export async function simplifyWithOpenAI({ apiKey, payload }) {
     id: block.id,
     text: block.text.startsWith("Photosynthesis is")
       ? "Plants use photosynthesis to turn light into energy they can use."
-      : "Most photosynthesis also releases oxygen as a waste product.",
+      : block.text.startsWith("Urban trees reduce")
+        ? "City trees can make hot streets cooler by giving shade and releasing water from their leaves."
+        : block.text.startsWith("Trees also intercept")
+          ? "Trees can catch rain, provide homes for wildlife, and make neighbourhoods nicer to walk through."
+          : block.text.startsWith("Researchers therefore")
+            ? "Researchers study city trees as important infrastructure as well as living ecosystems."
+            : "Most photosynthesis also releases oxygen as a waste product.",
   }));
 }
 `;
@@ -72,6 +79,24 @@ test("never exposes original prose while the first Oxford-target paragraph is pe
   await expect(intro).toBeVisible();
   await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Oxford 8");
   await expect(page.locator("#plainly-indicator")).toHaveAttribute("data-engine", "kmp");
+  await expect(page.locator("#plainly-indicator")).toHaveAttribute("data-article-kind", "wikipedia");
+});
+
+test("adjusts a semantic web article without touching navigation or sidebar copy", async ({ context, extensionId }) => {
+  await configureExtension(context, extensionId, { apiKey: SLOW_TEST_KEY, scheme: "oxford", level: "8" });
+  const page = await openArticle(context);
+  const intro = page.locator("#article-intro");
+
+  await expect(intro).toBeHidden();
+  await expect(page.getByRole("heading", { name: "Why city trees matter" })).toBeVisible();
+  await expect(page.locator("#nav-copy")).toHaveText("Subscribe for more stories and browse all sections.");
+  await expect(page.locator("#sidebar-copy")).toContainText("Related story");
+  await expect(intro).toHaveText("City trees can make hot streets cooler by giving shade and releasing water from their leaves.", { timeout: 5_000 });
+  await expect(page.locator("#article-second")).toContainText("Trees can catch rain");
+  await expect(page.locator("#article-third")).toContainText("Researchers study city trees");
+  await expect(page.locator("#nav-copy")).toHaveText("Subscribe for more stories and browse all sections.");
+  await expect(page.locator("#sidebar-copy")).toContainText("ten gardens to visit");
+  await expect(page.locator("#plainly-indicator")).toHaveAttribute("data-article-kind", "web");
 });
 
 test("adjusted target persists across Wikipedia navigation", async ({ context, extensionId }) => {
@@ -165,6 +190,14 @@ async function openWikipedia(context, title) {
   const page = await context.newPage();
   const url = `https://en.wikipedia.org/wiki/${title}`;
   await page.route(url, (route) => route.fulfill({ status: 200, contentType: "text/html", body: wikipediaFixture }));
+  await page.goto(url, { waitUntil: "domcontentloaded" });
+  return page;
+}
+
+async function openArticle(context) {
+  const page = await context.newPage();
+  const url = "https://example.test/news/city-trees";
+  await page.route(url, (route) => route.fulfill({ status: 200, contentType: "text/html", body: articleFixture }));
   await page.goto(url, { waitUntil: "domcontentloaded" });
   return page;
 }

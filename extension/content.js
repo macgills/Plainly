@@ -1,24 +1,4 @@
 (() => {
-  const BLOCK_SELECTOR = [
-    "#mw-content-text .mw-parser-output p",
-    "#mw-content-text .mw-parser-output li",
-  ].join(",");
-  const EXCLUDED_ANCESTORS = [
-    ".infobox",
-    ".navbox",
-    ".vertical-navbox",
-    ".reflist",
-    ".references",
-    ".toc",
-    "table",
-    "style",
-    "script",
-  ].join(",");
-  const EXCLUDED_INLINE_CONTENT = [
-    "sup.reference",
-    ".mw-editsection",
-  ].join(",");
-
   document.documentElement.classList.add("plainly-pending");
   void bootstrap();
 
@@ -33,6 +13,12 @@
     const kmp = globalThis["plainly-extension-core"];
     if (!kmp?.PlainlyCoreJs) {
       console.warn("Plainly KMP core is unavailable; showing the original article.");
+      leaveAdjustedMode();
+      return;
+    }
+    const extractor = globalThis.PlainlyArticleExtractor;
+    if (!extractor?.waitForArticle) {
+      console.warn("Plainly article extractor is unavailable; showing the original article.");
       leaveAdjustedMode();
       return;
     }
@@ -51,16 +37,15 @@
       return;
     }
 
-    document.documentElement.classList.add("plainly-enabled");
-    await waitForArticle();
-
-    const readableBlocks = collectReadableBlocks();
-    if (readableBlocks.length === 0) {
+    const article = await extractor.waitForArticle();
+    if (!article || article.blocks.length === 0) {
       leaveAdjustedMode();
       return;
     }
 
-    const title = document.querySelector("#firstHeading")?.textContent?.trim() ?? document.title;
+    document.documentElement.classList.add("plainly-enabled");
+    const readableBlocks = article.blocks;
+    const title = article.title || document.title;
     let session;
     try {
       session = kmp.PlainlyCoreJs.createSession(
@@ -103,6 +88,7 @@
     document.documentElement.classList.remove("plainly-pending");
     const indicator = addIndicator(target.label);
     indicator.dataset.engine = "kmp";
+    indicator.dataset.articleKind = article.kind;
 
     let firstBatch = true;
     while (!session.isComplete()) {
@@ -183,38 +169,6 @@
 
   function leaveAdjustedMode() {
     document.documentElement.classList.remove("plainly-pending", "plainly-enabled");
-  }
-
-  function waitForArticle() {
-    const existing = document.querySelector("#mw-content-text .mw-parser-output");
-    if (existing) return Promise.resolve(existing);
-
-    return new Promise((resolve) => {
-      const observer = new MutationObserver(() => {
-        const article = document.querySelector("#mw-content-text .mw-parser-output");
-        if (!article) return;
-        observer.disconnect();
-        resolve(article);
-      });
-      observer.observe(document.documentElement, { childList: true, subtree: true });
-    });
-  }
-
-  function collectReadableBlocks() {
-    return [...document.querySelectorAll(BLOCK_SELECTOR)]
-      .filter((element) => !element.closest(EXCLUDED_ANCESTORS))
-      .map((element) => ({
-        element,
-        originalText: element.textContent ?? "",
-        sourceText: extractReadableText(element),
-      }))
-      .filter((block) => block.sourceText.replace(/\s+/g, " ").trim().length >= 40);
-  }
-
-  function extractReadableText(element) {
-    const clone = element.cloneNode(true);
-    for (const excluded of clone.querySelectorAll(EXCLUDED_INLINE_CONTENT)) excluded.remove();
-    return clone.textContent ?? "";
   }
 
   function applyDecisions(decisions, blocksByKey) {
