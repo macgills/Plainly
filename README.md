@@ -102,6 +102,42 @@ The shared Kotlin Multiplatform core owns the reading-target policy used by brow
 
 DIBELS Maze is an assessment rather than a text-leveling scheme. Plainly uses the benchmark result as context for a conservative language-access recommendation. Any Lexile, F&P or Oxford crosswalk shown by Plainly is an approximate product aid, not an official conversion or certification.
 
+## Tests
+
+Install dependencies and build the shared browser bundle:
+
+```bash
+npm install
+npm run build
+```
+
+Then run the deterministic extension tests:
+
+```bash
+npm test
+```
+
+The browser integration suite launches Chromium with the real Manifest V3 extension and a deterministic provider. It covers reading-target selection, persistence, seamless hiding/reveal behavior and failure fallback without spending API credit.
+
+The shared Kotlin core has its own JVM/JS tests. With Gradle available:
+
+```bash
+gradle -p core jvmTest jsNodeTest compileCommonMainKotlinMetadata jsBrowserProductionWebpack
+```
+
+### Live OpenAI integration
+
+The repository also has a non-blocking live integration path using the `AI_SECRET` repository secret. It exercises the production OpenAI adapter and shipped browser extension against the real Responses API, then emits sanitized demo artifacts when successful.
+
+Run the same live checks locally with:
+
+```bash
+AI_SECRET="..." npm run test:live:api
+AI_SECRET="..." npm run test:live
+```
+
+No API key, browser profile, or request headers should be included in generated artifacts.
+
 ## Architecture
 
 ```text
