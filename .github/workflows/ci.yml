@@ -41,7 +41,7 @@ jobs:
   safari-ios:
     name: Safari iPad package + acceptance
     needs: core
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
