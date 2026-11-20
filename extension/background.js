@@ -1,4 +1,4 @@
-import { simplifyWithOpenAI } from "./openai.js";
+import { DEFAULT_REWRITING_PROVIDER, simplifyWithProvider } from "./rewriting-provider.js";
 
 const DEFAULT_SETTINGS = Object.freeze({
   enabled: true,
@@ -105,7 +105,7 @@ async function saveApiKey(apiKey) {
 
 async function simplify(payload) {
   const { openAIApiKey = "" } = await chrome.storage.local.get("openAIApiKey");
-  return simplifyWithOpenAI({ apiKey: openAIApiKey, payload });
+  return simplifyWithProvider({ provider: DEFAULT_REWRITING_PROVIDER, apiKey: openAIApiKey, payload });
 }
 
 async function restrictSecretStorage() {
