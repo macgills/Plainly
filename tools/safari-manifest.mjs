@@ -50,7 +50,11 @@ export async function assembleSafariExtension(sourcePath, targetPath) {
   await writeFile(manifestPath, `${JSON.stringify(safariManifest, null, 2)}\n`, "utf8");
 
   const openAiModule = await readFile(path.join(sourcePath, "openai.js"), "utf8");
-  const backgroundModule = await readFile(path.join(sourcePath, "background.js"), "utf8");\n  const providerModule = await readFile(path.join(sourcePath, "rewriting-provider.js"), "utf8").catch((error) => {\n    if (error.code === "ENOENT") return "";\n    throw error;\n  });
+  const backgroundModule = await readFile(path.join(sourcePath, "background.js"), "utf8");
+  const providerModule = await readFile(path.join(sourcePath, "rewriting-provider.js"), "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
   await writeFile(
     path.join(targetPath, SAFARI_BACKGROUND),
     bundleSafariBackground(openAiModule, backgroundModule, providerModule),
