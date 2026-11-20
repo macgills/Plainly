@@ -6,9 +6,24 @@ Plainly is an early browser-extension prototype that adjusts English Wikipedia p
 
 You do not need to be a developer to try it locally. The sections below are deliberately written as copy/paste instructions.
 
+## Try the Chrome or Edge extension without developer tools
+
+The GitHub Actions **CI** workflow produces a ready-to-load ZIP after the automated browser tests pass:
+
+1. Open the [latest CI workflow run](https://github.com/macgills/Plainly/actions/workflows/ci.yml) and choose a successful run.
+2. Under **Artifacts**, download **plainly-chrome-edge-...** (GitHub may ask you to sign in).
+3. Unzip the downloaded artifact, then unzip the contained `plainly-chrome-edge.zip`. Find the **extension** folder, which must contain `manifest.json`.
+4. In Chrome, open `chrome://extensions`; in Edge, open `edge://extensions`.
+5. Turn on **Developer mode**, choose **Load unpacked**, and select the extracted **extension** folder.
+6. Open Plainly from the extensions menu, select a reading target, and visit a normal article page.
+
+**Important prototype limitation:** rewriting currently requires an OpenAI API key saved in Plainly's popup; it is **not yet free/no-key for end users**. The extension installs without one but cannot rewrite articles until a key is configured. Do not distribute a shared key to students. Chrome and Edge desktop support extensions; **Chrome on iPad cannot install Chrome Web Store extensions**. School-managed browsers may block sideloading.
+
+Safari/iPad packaging is a separate, manually triggered CI job and does not block Chrome/Edge tests.
+
 ## What you need
 
-### For Chrome or Chromium
+### For building from source (optional)
 
 You need a Windows, macOS, or Linux computer with:
 
