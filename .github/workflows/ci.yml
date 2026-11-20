@@ -39,7 +39,8 @@ jobs:
           retention-days: 1
 
   safari-ios:
-    name: Safari iPad package + acceptance
+    name: Safari iPad package + acceptance (manual)
+    if: github.event_name == 'workflow_dispatch'
     needs: core
     runs-on: macos-15
     timeout-minutes: 20
@@ -322,6 +323,21 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      - name: Package installable Chrome and Edge extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s extension/generated/plainly-core.js
+          test -f extension/manifest.json
+          mkdir -p dist
+          zip -q -r dist/plainly-chrome-edge.zip extension -x '*/.DS_Store'
+      - name: Publish Chrome and Edge extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-chrome-edge-${{ github.run_number }}
+          path: dist/plainly-chrome-edge.zip
+          if-no-files-found: error
+          retention-days: 30
       - name: Build deterministic Plainly preview
         run: npm run demo
       - name: Publish prototype preview
