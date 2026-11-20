@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node tools/build-browser.mjs",
     "ipad": "bash tools/run-ipad-local.sh",
-    "test": "npm run test:openai && npm run test:safari-manifest && npm run test:integration",
+    "test": "npm run test:provider && npm run test:openai && npm run test:safari-manifest && npm run test:integration",
     "test:openai": "node --test tests/openai.integration.test.mjs",
     "test:safari-manifest": "node --test tests/safari-manifest.test.mjs",
     "test:integration": "playwright test",
@@ -14,7 +14,8 @@
     "demo": "playwright test --config=playwright.demo.config.mjs",
     "test:live:api": "node --test tests/openai.live.test.mjs",
     "test:live": "playwright test --config=playwright.live.config.mjs",
-    "eval:live": "node evaluation/run-live.mjs"
+    "eval:live": "node evaluation/run-live.mjs",
+    "test:provider": "node --test tests/rewriting-provider.test.mjs"
   },
   "engines": {
     "node": ">=20"
