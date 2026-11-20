@@ -16,18 +16,18 @@ export function toSafariManifest(manifest) {
   return result;
 }
 
-export function bundleSafariBackground(openAiModule, backgroundModule) {
+export function bundleSafariBackground(openAiModule, backgroundModule, providerModule = "") {
   const openAiClassic = openAiModule
     .replace(/^export\s+const\s+/gm, "const ")
     .replace(/^export\s+async\s+function\s+/gm, "async function ")
     .replace(/^export\s+function\s+/gm, "function ");
 
-  const backgroundClassic = backgroundModule.replace(
+  const providerClassic = providerModule\n    .replace(/^import\\s+\\{\\s*simplifyWithOpenAI\\s*\\}\\s+from\\s+[\"']\\.\\/openai\\.js[\"'];\\s*/m, \"\")\n    .replace(/^export\\s+const\\s+/gm, \"const \" )\n    .replace(/^export\\s+async\\s+function\\s+/gm, \"async function \" )\n    .replace(/^export\\s+function\\s+/gm, \"function \" );\n\n  const backgroundClassic = backgroundModule.replace(
     /^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/,
     "",
   );
 
-  const bundled = `${openAiClassic.trim()}\n\n${backgroundClassic.trim()}\n`;
+  const backgroundWithoutProviderImport = backgroundClassic.replace(\n    /^import\\s+\\{[^}]+\\}\\s+from\\s+[\"']\\.\\/rewriting-provider\\.js[\"'];\\s*/m,\n    \"\",\n  );\n  const bundled = `${openAiClassic.trim()}\\n\\n${providerClassic.trim()}\\n\\n${backgroundWithoutProviderImport.trim()}\\n`;
   if (/^\s*(?:import|export)\b/m.test(bundled)) {
     throw new Error("Safari background bundle still contains ES module syntax");
   }
@@ -44,10 +44,10 @@ export async function assembleSafariExtension(sourcePath, targetPath) {
   await writeFile(manifestPath, `${JSON.stringify(safariManifest, null, 2)}\n`, "utf8");
 
   const openAiModule = await readFile(path.join(sourcePath, "openai.js"), "utf8");
-  const backgroundModule = await readFile(path.join(sourcePath, "background.js"), "utf8");
+  const backgroundModule = await readFile(path.join(sourcePath, "background.js"), "utf8");\n  const providerModule = await readFile(path.join(sourcePath, "rewriting-provider.js"), "utf8").catch((error) => {\n    if (error.code === "ENOENT") return "";\n    throw error;\n  });
   await writeFile(
     path.join(targetPath, SAFARI_BACKGROUND),
-    bundleSafariBackground(openAiModule, backgroundModule),
+    bundleSafariBackground(openAiModule, backgroundModule, providerModule),
     "utf8",
   );
 
