@@ -22,12 +22,18 @@ export function bundleSafariBackground(openAiModule, backgroundModule, providerM
     .replace(/^export\s+async\s+function\s+/gm, "async function ")
     .replace(/^export\s+function\s+/gm, "function ");
 
-  const providerClassic = providerModule\n    .replace(/^import\\s+\\{\\s*simplifyWithOpenAI\\s*\\}\\s+from\\s+[\"']\\.\\/openai\\.js[\"'];\\s*/m, \"\")\n    .replace(/^export\\s+const\\s+/gm, \"const \" )\n    .replace(/^export\\s+async\\s+function\\s+/gm, \"async function \" )\n    .replace(/^export\\s+function\\s+/gm, \"function \" );\n\n  const backgroundClassic = backgroundModule.replace(
-    /^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/,
-    "",
-  );
+  const providerClassic = providerModule
+    .replace(/^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/m, "")
+    .replace(/^export\s+const\s+/gm, "const ")
+    .replace(/^export\s+async\s+function\s+/gm, "async function ")
+    .replace(/^export\s+function\s+/gm, "function ");
 
-  const backgroundWithoutProviderImport = backgroundClassic.replace(\n    /^import\\s+\\{[^}]+\\}\\s+from\\s+[\"']\\.\\/rewriting-provider\\.js[\"'];\\s*/m,\n    \"\",\n  );\n  const bundled = `${openAiClassic.trim()}\\n\\n${providerClassic.trim()}\\n\\n${backgroundWithoutProviderImport.trim()}\\n`;
+  const backgroundClassic = backgroundModule
+    .replace(/^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/m, "")
+    .replace(/^import\s+\{[^}]+\}\s+from\s+["']\.\/rewriting-provider\.js["'];\s*/m, "");
+
+  const bundled = [openAiClassic.trim(), providerClassic.trim(), backgroundClassic.trim()]
+    .filter(Boolean).join("\n\n") + "\n";
   if (/^\s*(?:import|export)\b/m.test(bundled)) {
     throw new Error("Safari background bundle still contains ES module syntax");
   }
