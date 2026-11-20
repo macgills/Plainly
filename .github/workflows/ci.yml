@@ -16,7 +16,7 @@ permissions:
 jobs:
   core:
     name: KMP core + browser bundle
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -308,7 +308,7 @@ jobs:
 
   test:
     needs: core
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -339,7 +339,7 @@ jobs:
     needs: core
     continue-on-error: true
     if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 12
     env:
       AI_SECRET: ${{ secrets.AI_SECRET }}
