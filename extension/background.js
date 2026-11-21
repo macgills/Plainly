@@ -33,12 +33,6 @@ async function handleMessage(message) {
     case "PLAINLY_UPDATE_SETTINGS":
       await updateSettings(message.settings);
       return { ok: true, settings: await getPublicSettings() };
-    case "PLAINLY_SAVE_API_KEY":
-      await saveApiKey(message.apiKey);
-      return { ok: true, settings: await getPublicSettings() };
-    case "PLAINLY_REMOVE_API_KEY":
-      await chrome.storage.local.remove("openAIApiKey");
-      return { ok: true, settings: await getPublicSettings() };
     case "PLAINLY_SIMPLIFY":
       return { ok: true, blocks: await simplify(message.payload) };
     default:
@@ -53,7 +47,6 @@ async function getPublicSettings() {
     "level",
     "dibelsPeriod",
     "dibelsMazeScore",
-    "openAIApiKey",
   ]);
   const hasReadingTarget = typeof stored.scheme === "string";
 
@@ -63,7 +56,6 @@ async function getPublicSettings() {
     level: hasReadingTarget && typeof stored.level === "string" ? stored.level : DEFAULT_SETTINGS.level,
     dibelsPeriod: typeof stored.dibelsPeriod === "string" ? stored.dibelsPeriod : DEFAULT_SETTINGS.dibelsPeriod,
     dibelsMazeScore: typeof stored.dibelsMazeScore === "string" ? stored.dibelsMazeScore : DEFAULT_SETTINGS.dibelsMazeScore,
-    hasApiKey: typeof stored.openAIApiKey === "string" && stored.openAIApiKey.length >= 20,
   };
 }
 
@@ -95,12 +87,6 @@ async function updateSettings(settings) {
     update.dibelsMazeScore = score;
   }
   await chrome.storage.local.set(update);
-}
-
-async function saveApiKey(apiKey) {
-  const normalized = typeof apiKey === "string" ? apiKey.trim() : "";
-  if (normalized.length < 20) throw new Error("Enter a valid OpenAI API key");
-  await chrome.storage.local.set({ openAIApiKey: normalized });
 }
 
 async function simplify(payload) {
