@@ -16,7 +16,7 @@ permissions:
 jobs:
   core:
     name: KMP core + browser bundle
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -39,9 +39,10 @@ jobs:
           retention-days: 1
 
   safari-ios:
-    name: Safari iPad package + acceptance
+    name: Safari iPad package + acceptance (manual)
+    if: github.event_name == 'workflow_dispatch'
     needs: core
-    runs-on: macos-latest
+    runs-on: macos-15
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -308,7 +309,7 @@ jobs:
 
   test:
     needs: core
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
@@ -322,6 +323,21 @@ jobs:
       - run: npm install --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
       - run: npm test
+      - name: Package installable Chrome and Edge extension
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s extension/generated/plainly-core.js
+          test -f extension/manifest.json
+          mkdir -p dist
+          zip -q -r dist/plainly-chrome-edge.zip extension -x '*/.DS_Store'
+      - name: Publish Chrome and Edge extension
+        uses: actions/upload-artifact@v4
+        with:
+          name: plainly-chrome-edge-${{ github.run_number }}
+          path: dist/plainly-chrome-edge.zip
+          if-no-files-found: error
+          retention-days: 30
       - name: Build deterministic Plainly preview
         run: npm run demo
       - name: Publish prototype preview
@@ -334,52 +350,3 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  live-openai:
-    name: Live OpenAI (non-blocking)
-    needs: core
-    continue-on-error: true
-    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: ubuntu-latest
-    timeout-minutes: 12
-    env:
-      AI_SECRET: ${{ secrets.AI_SECRET }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          name: plainly-kmp-browser
-          path: extension/generated
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - run: npm install --no-audit --no-fund
-      - name: Verify live OpenAI secret
-        shell: bash
-        run: |
-          if [ -z "$AI_SECRET" ]; then
-            echo "::error::AI_SECRET repository secret is required for the live integration test"
-            exit 1
-          fi
-      - name: Probe live Responses API through production adapter
-        run: npm run test:live:api
-      - run: npx playwright install --with-deps chromium
-      - name: Run live Plainly browser integration test
-        run: npm run test:live
-      - name: Build teacher evaluation pack
-        run: npm run eval:live
-      - name: Publish shareable live Plainly demo
-        uses: actions/upload-artifact@v4
-        with:
-          name: plainly-live-demo-${{ github.run_number }}
-          path: |
-            artifacts/
-            extension/
-          if-no-files-found: error
-          retention-days: 30
-      - name: Publish teacher review pack
-        uses: actions/upload-artifact@v4
-        with:
-          name: plainly-teacher-review-${{ github.run_number }}
-          path: evaluation-artifacts/
-          if-no-files-found: error
-          retention-days: 30

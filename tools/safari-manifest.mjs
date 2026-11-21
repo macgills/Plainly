@@ -16,18 +16,24 @@ export function toSafariManifest(manifest) {
   return result;
 }
 
-export function bundleSafariBackground(openAiModule, backgroundModule) {
+export function bundleSafariBackground(openAiModule, backgroundModule, providerModule = "") {
   const openAiClassic = openAiModule
     .replace(/^export\s+const\s+/gm, "const ")
     .replace(/^export\s+async\s+function\s+/gm, "async function ")
     .replace(/^export\s+function\s+/gm, "function ");
 
-  const backgroundClassic = backgroundModule.replace(
-    /^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/,
-    "",
-  );
+  const providerClassic = providerModule
+    .replace(/^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/m, "")
+    .replace(/^export\s+const\s+/gm, "const ")
+    .replace(/^export\s+async\s+function\s+/gm, "async function ")
+    .replace(/^export\s+function\s+/gm, "function ");
 
-  const bundled = `${openAiClassic.trim()}\n\n${backgroundClassic.trim()}\n`;
+  const backgroundClassic = backgroundModule
+    .replace(/^import\s+\{\s*simplifyWithOpenAI\s*\}\s+from\s+["']\.\/openai\.js["'];\s*/m, "")
+    .replace(/^import\s+\{[^}]+\}\s+from\s+["']\.\/rewriting-provider\.js["'];\s*/m, "");
+
+  const bundled = [openAiClassic.trim(), providerClassic.trim(), backgroundClassic.trim()]
+    .filter(Boolean).join("\n\n") + "\n";
   if (/^\s*(?:import|export)\b/m.test(bundled)) {
     throw new Error("Safari background bundle still contains ES module syntax");
   }
@@ -45,9 +51,13 @@ export async function assembleSafariExtension(sourcePath, targetPath) {
 
   const openAiModule = await readFile(path.join(sourcePath, "openai.js"), "utf8");
   const backgroundModule = await readFile(path.join(sourcePath, "background.js"), "utf8");
+  const providerModule = await readFile(path.join(sourcePath, "rewriting-provider.js"), "utf8").catch((error) => {
+    if (error.code === "ENOENT") return "";
+    throw error;
+  });
   await writeFile(
     path.join(targetPath, SAFARI_BACKGROUND),
-    bundleSafariBackground(openAiModule, backgroundModule),
+    bundleSafariBackground(openAiModule, backgroundModule, providerModule),
     "utf8",
   );
 

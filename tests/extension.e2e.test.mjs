@@ -8,15 +8,9 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const sourceExtensionPath = path.resolve(here, "../extension");
 const wikipediaFixture = await readFile(path.join(here, "fixtures/wikipedia.html"), "utf8");
 const articleFixture = await readFile(path.join(here, "fixtures/article.html"), "utf8");
-const TEST_KEY = "sk-test-plainly-browser-integration-key";
-const SLOW_TEST_KEY = "sk-test-plainly-slow-browser-integration-key";
-const FAIL_TEST_KEY = "sk-test-plainly-fail-browser-integration-key";
-
-const fakeOpenAIAdapter = `
-export async function simplifyWithOpenAI({ apiKey, payload }) {
-  if (typeof apiKey !== "string" || apiKey.length < 20) throw new Error("Missing test API key");
-  if (apiKey.includes("fail")) throw new Error("Synthetic OpenAI failure");
-  if (apiKey.includes("slow")) await new Promise((resolve) => setTimeout(resolve, 500));
+const fakeBrowserAdapter = `
+export async function simplifyWithBrowserAI({ payload }) {
+  await new Promise((resolve) => setTimeout(resolve, 500));
   if (payload.blocks.some((block) => block.id.startsWith("block-"))) {
     throw new Error("Expected stable KMP block keys, not legacy DOM indexes");
   }
@@ -43,7 +37,7 @@ const test = base.extend({
     const testRoot = await mkdtemp(path.join(tmpdir(), "plainly-e2e-"));
     const extensionPath = path.join(testRoot, "extension");
     await cp(sourceExtensionPath, extensionPath, { recursive: true });
-    await writeFile(path.join(extensionPath, "openai.js"), fakeOpenAIAdapter, "utf8");
+    await writeFile(path.join(extensionPath, "browser-ai.js"), fakeBrowserAdapter, "utf8");
 
     const context = await chromium.launchPersistentContext("", {
       channel: "chromium",
@@ -68,7 +62,7 @@ const test = base.extend({
 });
 
 test("never exposes original prose while the first Oxford-target paragraph is pending", async ({ context, extensionId }) => {
-  await configureExtension(context, extensionId, { apiKey: SLOW_TEST_KEY, scheme: "oxford", level: "8" });
+  await configureExtension(context, extensionId, { scheme: "oxford", level: "8" });
   const page = await openWikipedia(context, "Photosynthesis");
   const intro = page.locator("#intro");
 
@@ -83,7 +77,7 @@ test("never exposes original prose while the first Oxford-target paragraph is pe
 });
 
 test("adjusts a semantic web article without touching navigation or sidebar copy", async ({ context, extensionId }) => {
-  await configureExtension(context, extensionId, { apiKey: SLOW_TEST_KEY, scheme: "oxford", level: "8" });
+  await configureExtension(context, extensionId, { scheme: "oxford", level: "8" });
   const page = await openArticle(context);
   const intro = page.locator("#article-intro");
 
@@ -100,7 +94,7 @@ test("adjusts a semantic web article without touching navigation or sidebar copy
 });
 
 test("adjusted target persists across Wikipedia navigation", async ({ context, extensionId }) => {
-  await configureExtension(context, extensionId, { apiKey: TEST_KEY, scheme: "fountasPinnell", level: "M" });
+  await configureExtension(context, extensionId, { scheme: "fountasPinnell", level: "M" });
   const page = await context.newPage();
   await page.route("https://en.wikipedia.org/wiki/**", (route) => route.fulfill({ status: 200, contentType: "text/html", body: wikipediaFixture }));
 
@@ -113,7 +107,6 @@ test("adjusted target persists across Wikipedia navigation", async ({ context, e
 
 test("DIBELS settings produce and persist the KMP recommendation", async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
-  await expect(popup.getByRole("status")).not.toHaveText("Checking…");
   await popup.getByLabel("Reading scheme").selectOption("dibelsMaze");
   await popup.getByLabel("Reading level").selectOption("4");
   await popup.getByLabel("DIBELS benchmark period").selectOption("middle");
@@ -130,43 +123,20 @@ test("DIBELS settings produce and persist the KMP recommendation", async ({ cont
   await expect(reopened.getByLabel("DIBELS Maze score")).toHaveValue("14");
 });
 
-test("restores original prose if OpenAI fails", async ({ context, extensionId }) => {
-  await configureExtension(context, extensionId, { apiKey: FAIL_TEST_KEY, scheme: "oxford", level: "8" });
+test("rewrites without any API key configured", async ({ context }) => {
   const page = await openWikipedia(context, "Photosynthesis");
-  await expect(page.locator("#intro")).toContainText("Photosynthesis is a system of biological processes");
-  await expect(page.locator("#intro")).toBeVisible();
-  await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Couldn’t adjust");
+  await expect(page.locator("#intro")).toHaveText("Plants use photosynthesis to turn light into energy they can use.", { timeout: 5_000 });
+  await expect(page.locator("#plainly-indicator")).toHaveText("Plainly · Oxford 8");
 });
 
-test("does not hide Wikipedia when no API key has been configured", async ({ context }) => {
-  const page = await openWikipedia(context, "Photosynthesis");
-  await expect(page.locator("#intro")).toContainText("Photosynthesis is a system of biological processes");
-  await expect(page.locator("#intro")).toBeVisible();
-  await expect(page.locator("#plainly-indicator")).toHaveCount(0);
-});
-
-test("popup stores the API key without displaying it back", async ({ context, extensionId }) => {
-  let popup = await openPopup(context, extensionId);
-  const keyInput = popup.getByRole("textbox", { name: "OpenAI API key" });
-  await keyInput.fill(TEST_KEY);
-  await popup.getByRole("button", { name: "Save" }).click();
-  await expect(popup.getByRole("status")).toHaveText("API key saved on this device.");
-  await expect(keyInput).toHaveValue("");
-  await popup.close();
-
-  popup = await openPopup(context, extensionId);
-  await expect(popup.getByRole("status")).toHaveText("API key saved.");
-  await expect(popup.getByRole("textbox", { name: "OpenAI API key" })).toHaveValue("");
-  await popup.getByRole("button", { name: "Remove" }).click();
-  await expect(popup.getByRole("status")).toHaveText("No API key saved.");
-});
-
-async function configureExtension(context, extensionId, { apiKey, scheme, level }) {
+test("popup does not request an API key", async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
-  const keyInput = popup.getByRole("textbox", { name: "OpenAI API key" });
-  await keyInput.fill(apiKey);
-  await popup.getByRole("button", { name: "Save" }).click();
-  await expect(popup.getByRole("status")).toHaveText("API key saved on this device.");
+  await expect(popup.getByText("No API key or payment required", { exact: false })).toBeVisible();
+  await expect(popup.getByRole("textbox", { name: "OpenAI API key" })).toHaveCount(0);
+});
+
+async function configureExtension(context, extensionId, { scheme, level }) {
+  const popup = await openPopup(context, extensionId);
   await popup.getByLabel("Reading scheme").selectOption(scheme);
   await popup.getByLabel("Reading level").selectOption(level);
   await waitForTarget(popup, { scheme, level });

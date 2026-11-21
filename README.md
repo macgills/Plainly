@@ -1,14 +1,37 @@
 # Plainly
 
-**Browse Wikipedia at a reading target that suits the reader.**
+**The web, at your reading level.**
 
-Plainly is an early browser-extension prototype that adjusts English Wikipedia prose while keeping the original text available. It supports **Oxford Reading Tree**, **Fountas & Pinnell**, and **DIBELS 8 Maze** targets. The default is **Oxford 8**.
+Plainly is an early Chrome/Edge browser-extension prototype intended to adapt the main readable text of webpages while keeping the original available. It supports **Oxford Reading Tree**, **Fountas & Pinnell**, and **DIBELS 8 Maze** targets. The default is **Oxford 8**.
 
 You do not need to be a developer to try it locally. The sections below are deliberately written as copy/paste instructions.
 
+## Product requirement: no API key for readers
+
+**The intended Plainly product will not require children, parents, or teachers to provide an OpenAI API key, create an AI-provider account, or pay to rewrite webpages.** Free, no-key rewriting is a release requirement, not an optional future enhancement. Plainly aims to work on the main reading text across websites, not only Wikipedia, while preserving meaning, links, images, headings, and page layout.
+
+**Development-branch experiment:** The extension now defaults to Chrome's built-in on-device Prompt API and does **not ask for an API key**. This requires a compatible Chrome installation and device; unsupported devices fail open to the original article. It has **not** passed real-device or educational-quality validation and is **not ready for release**. Earlier downloadable builds still require an OpenAI key; do not buy credits to test them.
+
+See [product objective and release gates](docs/product-objective-and-release-gates.md) for acceptance criteria and progress.
+
+## Try the Chrome or Edge extension without developer tools
+
+The GitHub Actions **CI** workflow produces a ready-to-load ZIP after the automated browser tests pass:
+
+1. Open the [latest CI workflow run](https://github.com/macgills/Plainly/actions/workflows/ci.yml) and choose a successful run.
+2. Under **Artifacts**, download **plainly-chrome-edge-...** (GitHub may ask you to sign in).
+3. Unzip the downloaded artifact, then unzip the contained `plainly-chrome-edge.zip`. Find the **extension** folder, which must contain `manifest.json`.
+4. In Chrome, open `chrome://extensions`; in Edge, open `edge://extensions`.
+5. Turn on **Developer mode**, choose **Load unpacked**, and select the extracted **extension** folder.
+6. Open Plainly from the extensions menu, select a reading target, and visit a normal article page.
+
+**Important prototype limitation:** rewriting currently requires an OpenAI API key saved in Plainly's popup; it is **not yet free/no-key for end users**. The extension installs without one but cannot rewrite articles until a key is configured. Do not distribute a shared key to students. Chrome and Edge desktop support extensions; **Chrome on iPad cannot install Chrome Web Store extensions**. School-managed browsers may block sideloading.
+
+Safari/iPad packaging is a separate, manually triggered CI job and does not block Chrome/Edge tests.
+
 ## What you need
 
-### For Chrome or Chromium
+### For building from source (optional)
 
 You need a Windows, macOS, or Linux computer with:
 
@@ -120,7 +143,7 @@ For the current detailed acceptance flow, see [`docs/ipad-acceptance.md`](docs/i
 
 ## OpenAI API key safety
 
-Plainly is currently a bring-your-own-key prototype.
+**This section documents the legacy prototype only; it is not the planned end-user experience.** Plainly is currently a bring-your-own-key prototype.
 
 The key is stored in the browser extension's local storage and is not exposed to the Wikipedia content script. The popup also does not display a saved key back to the user. Article text is sent directly from the extension to the OpenAI Responses API.
 
