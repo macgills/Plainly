@@ -1,12 +1,14 @@
 import { simplifyWithOpenAI } from "./openai.js";
+import { simplifyWithBrowserAI } from "./browser-ai.js";
 
 // All rewriting engines use the same contract:
 // simplify({ apiKey, payload }) -> [{ id, text }, ...].
 // Keep provider selection in the trusted background context, never in page scripts.
-export const DEFAULT_REWRITING_PROVIDER = "openai";
+export const DEFAULT_REWRITING_PROVIDER = "browser-ai";
 
 const providers = Object.freeze({
   openai: simplifyWithOpenAI,
+  "browser-ai": simplifyWithBrowserAI,
 });
 
 export function availableRewritingProviders() {
