@@ -104,8 +104,7 @@ async function saveApiKey(apiKey) {
 }
 
 async function simplify(payload) {
-  const { openAIApiKey = "" } = await chrome.storage.local.get("openAIApiKey");
-  return simplifyWithProvider({ provider: DEFAULT_REWRITING_PROVIDER, apiKey: openAIApiKey, payload });
+  return simplifyWithProvider({ provider: DEFAULT_REWRITING_PROVIDER, payload });
 }
 
 async function restrictSecretStorage() {
