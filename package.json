@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node tools/build-browser.mjs",
     "ipad": "bash tools/run-ipad-local.sh",
-    "test": "npm run test:no-key-evaluation && npm run test:provider && npm run test:openai && npm run test:safari-manifest && npm run test:integration",
+    "test": "node --test tests/browser-ai.test.mjs && npm run test:no-key-evaluation && npm run test:provider && npm run test:openai && npm run test:safari-manifest && npm run test:integration",
     "test:openai": "node --test tests/openai.integration.test.mjs",
     "test:safari-manifest": "node --test tests/safari-manifest.test.mjs",
     "test:integration": "playwright test",
