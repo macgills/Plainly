@@ -10,7 +10,7 @@ You do not need to be a developer to try it locally. The sections below are deli
 
 **The intended Plainly product will not require children, parents, or teachers to provide an OpenAI API key, create an AI-provider account, or pay to rewrite webpages.** Free, no-key rewriting is a release requirement, not an optional future enhancement. Plainly aims to work on the main reading text across websites, not only Wikipedia, while preserving meaning, links, images, headings, and page layout.
 
-**Current prototype limitation:** The downloadable version **still uses a user-provided OpenAI API key** and cannot rewrite without available API credits. It is **not** the finished no-key product. We are evaluating a replacement rewriting engine; no solution has yet passed quality and device-performance validation. Do not buy credits just to evaluate the future no-key product.
+**Development-branch experiment:** The extension now defaults to Chrome's built-in on-device Prompt API and does **not ask for an API key**. This requires a compatible Chrome installation and device; unsupported devices fail open to the original article. It has **not** passed real-device or educational-quality validation and is **not ready for release**. Earlier downloadable builds still require an OpenAI key; do not buy credits to test them.
 
 See [product objective and release gates](docs/product-objective-and-release-gates.md) for acceptance criteria and progress.
 
