@@ -9,13 +9,10 @@ const sourceExtensionPath = path.resolve(here, "../extension");
 const artifactsPath = path.resolve(here, "../artifacts-preview");
 const wikipediaFixture = await readFile(path.join(here, "fixtures/wikipedia.html"), "utf8");
 const DEMO_URL = "https://en.wikipedia.org/wiki/Photosynthesis";
-const TEST_KEY = "sk-test-plainly-demo-preview-key";
 const TARGET = Object.freeze({ scheme: "oxford", level: "8", label: "Oxford 8" });
 
 const previewAdapter = `
-export const DEFAULT_OPENAI_API_URL = "https://api.openai.com/v1/responses";
-export const DEFAULT_MODEL = "preview-fixture";
-export async function simplifyWithOpenAI({ payload }) {
+export async function simplifyWithBrowserAI({ payload }) {
   return payload.blocks.map((block) => ({
     id: block.id,
     text: block.text.startsWith("Photosynthesis is")
@@ -30,7 +27,7 @@ test("build a shareable deterministic Plainly preview", async () => {
   const testRoot = await mkdtemp(path.join(tmpdir(), "plainly-preview-"));
   const extensionPath = path.join(testRoot, "extension");
   await cp(sourceExtensionPath, extensionPath, { recursive: true });
-  await writeFile(path.join(extensionPath, "openai.js"), previewAdapter, "utf8");
+  await writeFile(path.join(extensionPath, "browser-ai.js"), previewAdapter, "utf8");
 
   const context = await chromium.launchPersistentContext("", {
     channel: "chromium",
@@ -44,9 +41,7 @@ test("build a shareable deterministic Plainly preview", async () => {
     const popup = await context.newPage();
     await popup.setViewportSize({ width: 430, height: 650 });
     await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-    await expect(popup.getByRole("status")).not.toHaveText("Checking…");
-    await popup.getByRole("textbox", { name: "OpenAI API key" }).fill(TEST_KEY);
-    await popup.getByRole("button", { name: "Save" }).click();
+    await expect(popup.getByText("No API key or payment required", { exact: false })).toBeVisible();
     await popup.getByLabel("Reading scheme").selectOption(TARGET.scheme);
     await popup.getByLabel("Reading level").selectOption(TARGET.level);
     await popup.screenshot({ path: path.join(artifactsPath, "plainly-popup.png"), fullPage: true });
@@ -77,7 +72,7 @@ test("build a shareable deterministic Plainly preview", async () => {
       "",
       `Reading target: ${TARGET.label}`,
       "This bundle demonstrates the real Chrome extension UI and DOM transformation path with deterministic fixture output.",
-      "It does NOT claim to be a live OpenAI result.",
+      "It does NOT claim to be output from a real on-device AI model. No API key is used.",
       "",
     ].join("\n"), "utf8");
   } finally {
