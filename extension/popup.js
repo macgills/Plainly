@@ -1,8 +1,4 @@
 const enabled = document.querySelector("#enabled");
-const apiKey = document.querySelector("#api-key");
-const saveKey = document.querySelector("#save-key");
-const removeKey = document.querySelector("#remove-key");
-const keyStatus = document.querySelector("#key-status");
 const scheme = document.querySelector("#scheme");
 const level = document.querySelector("#level");
 const dibelsFields = document.querySelector("#dibels-fields");
@@ -13,7 +9,7 @@ const targetNote = document.querySelector("#target-note");
 const kmp = globalThis["plainly-extension-core"]?.PlainlyCoreJs;
 
 if (!kmp) {
-  setStatus("Plainly KMP core is unavailable.", true);
+  console.error("Plainly KMP core is unavailable.");
   throw new Error("Plainly KMP core is unavailable");
 }
 
@@ -66,17 +62,12 @@ function bindEvents() {
     void ready.then(() => updateSettings({ dibelsMazeScore: score }));
   });
 
-  saveKey.addEventListener("click", () => void saveApiKey());
-  apiKey.addEventListener("keydown", (event) => {
-    if (event.key === "Enter") void saveApiKey();
-  });
-  removeKey.addEventListener("click", () => void removeApiKey());
 }
 
 async function loadSettings() {
   const response = await send({ type: "PLAINLY_GET_SETTINGS" });
   if (!response?.ok) {
-    setStatus(response?.error ?? "Could not read Plainly settings", true);
+    console.error(response?.error ?? "Could not read Plainly settings");
     return;
   }
   renderSettings(response.settings);
@@ -84,39 +75,7 @@ async function loadSettings() {
 
 async function updateSettings(settings) {
   const response = await send({ type: "PLAINLY_UPDATE_SETTINGS", settings });
-  if (!response?.ok) setStatus(response?.error ?? "Could not save settings", true);
-}
-
-async function saveApiKey() {
-  await ready;
-  const value = apiKey.value.trim();
-  saveKey.disabled = true;
-  setStatus("Saving…");
-
-  const response = await send({ type: "PLAINLY_SAVE_API_KEY", apiKey: value });
-  saveKey.disabled = false;
-
-  if (!response?.ok) {
-    setStatus(response?.error ?? "Could not save API key", true);
-    return;
-  }
-
-  apiKey.value = "";
-  renderKeyState(true);
-  setStatus("API key saved on this device.");
-}
-
-async function removeApiKey() {
-  await ready;
-  const response = await send({ type: "PLAINLY_REMOVE_API_KEY" });
-  if (!response?.ok) {
-    setStatus(response?.error ?? "Could not remove API key", true);
-    return;
-  }
-
-  apiKey.value = "";
-  renderKeyState(false);
-  setStatus("No API key saved.");
+  if (!response?.ok) console.error(response?.error ?? "Could not save settings");
 }
 
 function renderSettings(settings) {
@@ -129,8 +88,6 @@ function renderSettings(settings) {
     : "middle";
   dibelsScore.value = settings.dibelsMazeScore ?? "";
   renderTargetDetails();
-  renderKeyState(settings.hasApiKey);
-  setStatus(settings.hasApiKey ? "API key saved." : "No API key saved.");
 }
 
 function renderTargetDetails() {
@@ -157,16 +114,6 @@ function renderTargetDetails() {
     dibelsRecommendation.textContent = error instanceof Error ? error.message : String(error);
     dibelsRecommendation.hidden = false;
   }
-}
-
-function renderKeyState(hasApiKey) {
-  removeKey.hidden = !hasApiKey;
-  apiKey.placeholder = hasApiKey ? "Replace saved key…" : "sk-…";
-}
-
-function setStatus(message, isError = false) {
-  keyStatus.textContent = message;
-  keyStatus.dataset.error = isError ? "true" : "false";
 }
 
 function option(value, label) {
