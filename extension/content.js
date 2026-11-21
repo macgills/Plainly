@@ -5,7 +5,7 @@
   async function bootstrap() {
     const settingsResponse = await chrome.runtime.sendMessage({ type: "PLAINLY_GET_SETTINGS" });
     const settings = settingsResponse?.settings;
-    if (!settingsResponse?.ok || !settings?.enabled || !settings.hasApiKey) {
+    if (!settingsResponse?.ok || !settings?.enabled) {
       leaveAdjustedMode();
       return;
     }
