@@ -14,9 +14,9 @@ const payload = {
   ],
 };
 
-test("OpenAI remains the default rewriting provider", () => {
-  assert.equal(DEFAULT_REWRITING_PROVIDER, "openai");
-  assert.deepEqual(availableRewritingProviders(), ["openai"]);
+test("keyless browser AI is the default rewriting provider", () => {
+  assert.equal(DEFAULT_REWRITING_PROVIDER, "browser-ai");
+  assert.deepEqual(availableRewritingProviders(), ["openai", "browser-ai"]);
 });
 
 test("passes the reading target and blocks to a replaceable adapter", async () => {
